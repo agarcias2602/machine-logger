@@ -1,13 +1,16 @@
 import re
+import os
+import uuid
+import smtplib
 import streamlit as st
 import pandas as pd
-import uuid
 from PIL import Image
-from streamlit_drawable_canvas import st_canvas
-import os
 from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from streamlit_drawable_canvas import st_canvas
 
-# --- File names & columns ---
+# --- File names & schema ---
 CUSTOMERS_FILE = "customers.csv"
 MACHINES_FILE  = "machines.csv"
 JOBS_FILE      = "jobs.csv"
@@ -30,7 +33,32 @@ jobs      = load_df(JOBS_FILE,      JOBS_COLUMNS)
 
 st.title("Coffee Machine Service Logger")
 
-# --- Brands & Models Data ---
+# --- Email helper ---
+def send_job_email(job_id, cust_email, html_body):
+    sender      = st.secrets["email"]["user"]
+    password    = st.secrets["email"]["password"]
+    smtp_server = st.secrets["email"]["smtp_server"]
+    smtp_port   = st.secrets["email"]["smtp_port"]
+    recipients  = ["mhunter4coffee@gmail.com"]
+    if cust_email:
+        recipients.append(cust_email)
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"New Job Logged: {job_id}"
+    msg["From"]    = sender
+    msg["To"]      = ", ".join(recipients)
+
+    text = re.sub(r"<br\s*/?>", "\n", re.sub(r"<.*?>", "", html_body))
+    part1 = MIMEText(text, "plain")
+    part2 = MIMEText(html_body, "html")
+    msg.attach(part1)
+    msg.attach(part2)
+
+    with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+        server.login(sender, password)
+        server.sendmail(sender, recipients, msg.as_string())
+
+# --- Brands & Models ---
 coffee_brands = {
     "Bezzera": ["BZ10","DUO","Magica","Matrix","Mitica"],
     "Breville": ["Barista Express","Barista Pro","Duo Temp","Infuser","Oracle Touch"],
@@ -66,13 +94,12 @@ for b in coffee_brands:
         ms.append("Other")
     coffee_brands[b] = ms
 
-# Year options
 current_year = datetime.now().year
 years = list(range(1970, current_year+1))[::-1]
 
 # -------------------- CUSTOMER FORM --------------------
-cust_names = customers["Company Name"].tolist()
-sel_cust   = st.selectbox("Select customer", ["Add new..."] + cust_names)
+cust_list = customers["Company Name"].tolist()
+sel_cust  = st.selectbox("Select customer", ["Add new..."] + cust_list)
 
 if sel_cust == "Add new...":
     with st.form("new_customer"):
@@ -114,7 +141,7 @@ if sel_cust == "Add new...":
 
 else:
     # --- VIEW SELECTED CUSTOMER INFO ---
-    cust_row = customers.loc[customers["Company Name"] == sel_cust].iloc[0]
+    cust_row = customers[customers["Company Name"]==sel_cust].iloc[0]
     st.subheader("Customer Information")
     st.text_input("Company Name", value=cust_row.get("Company Name",""), disabled=True)
     st.text_input("Contact Name", value=cust_row.get("Contact Name",""), disabled=True)
@@ -131,70 +158,59 @@ else:
     selected_label = st.selectbox("Select machine", ["Add new..."] + machine_labels)
 
     if selected_label == "Add new...":
-        # --- BRAND & MODEL SELECTORS outside the form ---
-        for key in ("brand_select","prev_brand","model_select","custom_brand","custom_model"):
-            if key not in st.session_state:
-                st.session_state[key] = ""
+        # Brand & Model selectors outside form
+        for k in ("brand_sel","prev_brand","model_sel","custom_brand","custom_model"):
+            if k not in st.session_state: st.session_state[k] = ""
 
-        brand = st.selectbox(
-            "Brand*",
-            [""] + brand_order,
-            key="brand_select"
-        )
+        brand = st.selectbox("Brand*", [""]+brand_order, key="brand_sel")
         if brand != st.session_state.prev_brand:
-            st.session_state.prev_brand     = brand
-            st.session_state.model_select   = ""
-            st.session_state.custom_model   = ""
-            st.session_state.custom_brand   = ""
+            st.session_state.prev_brand   = brand
+            st.session_state.model_sel    = ""
+            st.session_state.custom_model = ""
+            st.session_state.custom_brand = ""
 
         custom_brand = ""
-        if brand == "Other":
+        if brand=="Other":
             custom_brand = st.text_input("Enter new brand*", key="custom_brand")
 
         model_opts = coffee_brands.get(brand, ["Other"] if brand=="Other" else [])
-        model = st.selectbox(
-            "Model*",
-            [""] + model_opts,
-            key="model_select"
-        )
+        model = st.selectbox("Model*", [""]+model_opts, key="model_sel")
         custom_model = ""
-        if model == "Other":
+        if model=="Other":
             custom_model = st.text_input("Enter new model*", key="custom_model")
 
-        # --- REST OF FORM ---
         with st.form("new_machine"):
-            year   = st.selectbox("Year*", [""] + [str(y) for y in years], key="year")
+            year   = st.selectbox("Year*", [""]+[str(y) for y in years], key="year")
             serial = st.text_input("Serial Number (optional)", key="serial")
             obs    = st.text_area("Observations (optional)", key="obs")
             photo  = st.file_uploader("Machine photo*", type=["jpg","png"], key="photo")
 
             errs=[]
-            final_brand = custom_brand.strip() if brand=="Other" else brand
-            final_model = custom_model.strip()  if model=="Other" else model
-            if not final_brand: errs.append("Brand is required.")
-            if not final_model: errs.append("Model is required.")
+            fb = custom_brand.strip() if brand=="Other" else brand
+            fm = custom_model.strip() if model=="Other" else model
+            if not fb: errs.append("Brand is required.")
+            if not fm: errs.append("Model is required.")
             if not st.session_state.year: errs.append("Year is required.")
             if not photo: errs.append("Photo is required.")
 
-            submitted = st.form_submit_button("Save Machine")
-            if submitted:
+            sub2 = st.form_submit_button("Save Machine")
+            if sub2:
                 if errs:
                     st.error("\n".join(errs))
                 else:
-                    mid = str(uuid.uuid4())
-                    path = f"{mid}_machine.png"
+                    mid = str(uuid.uuid4()); path=f"{mid}_machine.png"
                     Image.open(photo).save(path)
-                    row = pd.DataFrame([{
+                    new = pd.DataFrame([{
                         "ID": mid,
                         "Customer ID": customer_id,
-                        "Brand": final_brand,
-                        "Model": final_model,
+                        "Brand": fb,
+                        "Model": fm,
                         "Year": st.session_state.year,
                         "Serial Number": serial,
                         "Photo Path": path,
                         "Observations": obs
                     }])
-                    machines = pd.concat([machines, row], ignore_index=True)
+                    machines = pd.concat([machines, new], ignore_index=True)
                     machines.to_csv(MACHINES_FILE, index=False)
                     st.success("Machine saved! Reload to select.")
                     st.stop()
@@ -210,11 +226,12 @@ else:
         st.text_input("Year",          value=mrow.get("Year",""),          disabled=True)
         st.text_input("Serial Number", value=mrow.get("Serial Number",""), disabled=True)
         st.text_area("Observations",    value=mrow.get("Observations",""),  disabled=True)
+
         photo_path = mrow.get("Photo Path","")
-        if isinstance(photo_path, str) and os.path.exists(photo_path):
+        if isinstance(photo_path,str) and os.path.exists(photo_path):
             st.image(photo_path, caption="Machine Photo", width=200)
 
-        # --- JOB LOGGING FORM ---
+        # -------------------- JOB LOGGING FORM --------------------
         st.subheader("Log a Job")
         with st.form("log_job"):
             employee   = st.text_input("Employee Name")
@@ -237,26 +254,26 @@ else:
 
             submitted = st.form_submit_button("Submit Job")
             if submitted and all([employee, technician, job_date, travel, time_in, time_out, desc]):
-                jid = str(uuid.uuid4())
+                job_id = str(uuid.uuid4())
                 sig_path = ""
                 if sigimg.image_data is not None:
                     im = Image.fromarray(sigimg.image_data)
-                    sig_path = f"{jid}_signature.png"; im.save(sig_path)
+                    sig_path = f"{job_id}_signature.png"; im.save(sig_path)
 
                 fpath = ""
                 if found:
                     ext = found.name.rsplit(".",1)[-1]
-                    fpath = f"{jid}_found.{ext}"
+                    fpath = f"{job_id}_found.{ext}"
                     open(fpath,"wb").write(found.read())
 
                 lpath = ""
                 if left:
                     ext = left.name.rsplit(".",1)[-1]
-                    lpath = f"{jid}_left.{ext}"
+                    lpath = f"{job_id}_left.{ext}"
                     open(lpath,"wb").write(left.read())
 
                 new_job = pd.DataFrame([{
-                    "Job ID": jid,
+                    "Job ID": job_id,
                     "Customer ID": customer_id,
                     "Machine ID": machine_ids[idx],
                     "Employee Name": employee,
@@ -276,6 +293,24 @@ else:
                 jobs.to_csv(JOBS_FILE, index=False)
                 st.success("Job logged successfully!")
 
+                # send email
+                cust_email = cust_row.get("Email","")
+                html = (
+                    f"<p><strong>Customer:</strong> {sel_cust}</p>"
+                    f"<p><strong>Machine:</strong> {selected_label}</p>"
+                    f"<p><strong>Employee:</strong> {employee}</p>"
+                    f"<p><strong>Technician:</strong> {technician}</p>"
+                    f"<p><strong>Date:</strong> {job_date}</p>"
+                    f"<p><strong>Travel Time:</strong> {travel} min</p>"
+                    f"<p><strong>Time In:</strong> {time_in}</p>"
+                    f"<p><strong>Time Out:</strong> {time_out}</p>"
+                    f"<p><strong>Description:</strong> {desc}</p>"
+                    + (f"<p><strong>Parts Used:</strong> {parts}</p>" if parts else "")
+                    + (f"<p><strong>Additional Comments:</strong> {comments}</p>" if comments else "")
+                )
+                send_job_email(job_id, cust_email, html)
+
+                # preview
                 st.markdown("### Preview")
                 st.write(f"Customer: {sel_cust}")
                 st.write(f"Machine: {selected_label}")
@@ -283,7 +318,8 @@ else:
                 st.write(f"Technician: {technician}")
                 st.write(f"Date: {job_date}")
                 st.write(f"Travel Time: {travel} min")
-                st.write(f"Time In: {time_in}  Time Out: {time_out}")
+                st.write(f"Time In: {time_in}")
+                st.write(f"Time Out: {time_out}")
                 st.write(f"Job Description: {desc}")
                 if parts:    st.write(f"Parts Used: {parts}")
                 if comments: st.write(f"Additional Comments: {comments}")
