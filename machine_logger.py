@@ -164,3 +164,27 @@ else:
                     st.image(sig_path, caption="Signature", width=150)
                 if photo_path:
                     st.image(photo_path, caption="Machine Photo", width=150)
+
+# --- At the very END of your file ---
+
+tab1, tab2, tab3 = st.tabs(["All Jobs", "All Customers", "All Machines"])
+
+with tab1:
+    st.header("All Job Logs")
+    st.dataframe(jobs)
+    # Show images for last job as an example
+    if not jobs.empty:
+        last = jobs.iloc[-1]
+        if last["Signature Path"] and os.path.exists(last["Signature Path"]):
+            st.image(last["Signature Path"], caption="Last Job Signature", width=200)
+        if last["Machine Photo Path"] and os.path.exists(last["Machine Photo Path"]):
+            st.image(last["Machine Photo Path"], caption="Last Job Machine Photo", width=200)
+
+with tab2:
+    st.header("All Customers")
+    st.dataframe(customers)
+
+with tab3:
+    st.header("All Machines")
+    st.dataframe(machines)
+
