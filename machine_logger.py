@@ -81,13 +81,32 @@ coffee_brands = {
     "Bezzera": ["BZ10","DUO","Magica","Matrix","Mitica"],
     "Breville": ["Barista Express","Barista Pro","Duo Temp","Infuser","Oracle Touch"],
     "Carimali": ["Armonia Ultra","BlueDot","CA1000","Optima","SolarTouch"],
-    # … add the rest …
-    "WMF": ["1100 S","1500 S+","5000 S+","9000 S+","Espresso"],
-    "Other": ["Other"]
+    "Cimbali":  ["M21 Junior","M39","M100","M200","S20"],
+    "DeLonghi": ["Dedica","Dinamica","Eletta","La Specialista","Magnifica","Primadonna"],
+    "ECM":      ["Barista","Classika","Elektronika","Synchronika","Technika"],
+    "Faema":    ["E61","Emblema","E98 UP","Teorema","X30"],
+    "Franke":   ["A300","A600","A800","S200","S700"],
+    "Gaggia":   ["Accademia","Anima","Babila","Cadorna","Classic"],
+    "Jura":     ["ENA 8","Giga X8","Impressa XJ9","WE8","Z10"],
+    "Krups":    ["EA82","EA89","Evidence","Essential","Quattro Force"],
+    "La Marzocco": ["GB5","GS3","Linea Mini","Linea PB","Strada"],
+    "La Spaziale": ["Dream","S1 Mini Vivaldi II","S2","S8","S9"],
+    "Miele":    ["CM5300","CM6150","CM6350","CM6360","CM7750"],
+    "Nuova Simonelli": ["Appia","Aurelia","Musica","Oscar","Talento"],
+    "Philips":  ["2200 Series","3200 Series","5000 Series","LatteGo","Saeco Xelsis"],
+    "Quick Mill": ["Alexia","Andreja","Pegaso","Silvano","Vetrano"],
+    "Rancilio": ["Classe 11","Classe 5","Classe 9","Egro One","Silvia"],
+    "Rocket Espresso": ["Appartamento","Cronometro","Giotto","Mozzafiato","R58"],
+    "Saeco":    ["Aulika","Incanto","Lirika","PicoBaristo","Royal"],
+    "Schaerer": ["Coffee Art Plus","Coffee Club","Prime","Soul","Touch"],
+    "Siemens":  ["EQ.3","EQ.6","EQ.9","Surpresso","TE653"],
+    "Victoria Arduino": ["Adonis","Black Eagle","Eagle One","Mythos One","Venus"],
+    "WMF":      ["1100 S","1500 S+","5000 S+","9000 S+","Espresso"],
+    "Other":    ["Other"]
 }
-brands = sorted([b for b in coffee_brands if b!="Other"]) + ["Other"]
+brands = sorted(b for b in coffee_brands if b!="Other") + ["Other"]
 for b in coffee_brands:
-    ms = sorted([m for m in coffee_brands[b] if m!="Other"])
+    ms = sorted(m for m in coffee_brands[b] if m!="Other")
     if "Other" in coffee_brands[b]:
         ms.append("Other")
     coffee_brands[b] = ms
@@ -109,7 +128,7 @@ if "coords" not in st.session_state:
 
 # ——— Mode & selection state ———
 if "mode" not in st.session_state:
-    st.session_state.mode = "select"            # other values: "add", "existing"
+    st.session_state.mode = "select"            # values: "select", "add", "existing"
     st.session_state.selected_customer = None
 
 mode = st.session_state.mode
@@ -123,14 +142,13 @@ if mode == "select":
     with col2:
         st.markdown("**Or click a red dot to select a customer**")
 
-    # GTA map, greyscale
     m = folium.Map(location=[43.7, -79.4], zoom_start=10, tiles="CartoDB positron")
     fg = folium.FeatureGroup()
     for cid,(lat,lon) in st.session_state.coords.items():
         if lat and lon:
             name = customers.loc[customers["ID"]==cid, "Company Name"].iat[0]
-            folium.CircleMarker(
-                [lat,lon], radius=6, color="red", fill=True, fill_color="red",
+            folium.CircleMarker([lat,lon],
+                radius=6, color="red", fill=True, fill_color="red",
                 tooltip=name
             ).add_to(fg)
     fg.add_to(m)
@@ -140,7 +158,6 @@ if mode == "select":
     md = st_folium(m, width=700, height=400)
     click = md.get("last_clicked")
     if click:
-        # pick nearest marker
         best,bd = None,1e9
         for cid,(clat,clon) in st.session_state.coords.items():
             if clat and clon:
@@ -148,14 +165,16 @@ if mode == "select":
                 if d < bd:
                     best,bd = cid,d
         if best and bd < 0.0005:
-            st.session_state.selected_customer = customers.loc[customers["ID"]==best, "Company Name"].iat[0]
+            st.session_state.selected_customer = customers.loc[
+                customers["ID"]==best,"Company Name"
+            ].iat[0]
             st.session_state.mode = "existing"
 
     st.stop()
 
 # ——— 2) ADD NEW CUSTOMER ———
 if mode == "add":
-    st.header("➕ Add New Customer")
+    st.header("➕ Add New Customer")
     with st.form("add_cust"):
         cname   = st.text_input("Company Name*")
         contact = st.text_input("Contact Name*")
@@ -172,8 +191,7 @@ if mode == "add":
         if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
             errs.append("Enter a valid email.")
         if not errs:
-            st.markdown(f"[Preview address on Google Maps](https://www.google.com/maps/search/{addr.replace(' ','+')})")
-
+            st.markdown(f"[Preview on Google Maps](https://www.google.com/maps/search/{addr.replace(' ','+')})")
         if st.form_submit_button("Save Customer") and not errs:
             cid = str(uuid.uuid4())
             new = pd.DataFrame([{
@@ -186,13 +204,19 @@ if mode == "add":
             }])
             customers = pd.concat([customers,new], ignore_index=True)
             customers.to_csv(CUSTOMERS_FILE, index=False)
-            st.success("Customer added — please reload.")
+            st.success("Customer added—please reload.")
             st.stop()
 
 # ——— 3) EXISTING CUSTOMER FLOW ———
-# (mode == "existing")
 sel_name = st.session_state.selected_customer
-cust = customers[customers["Company Name"]==sel_name].iloc[0]
+
+# Guard against missing selection
+if not sel_name or sel_name not in customers["Company Name"].tolist():
+    st.session_state.mode = "select"
+    st.warning("Customer not found—please click a map marker to select or add new.")
+    st.stop()
+
+cust = customers.loc[customers["Company Name"] == sel_name].iloc[0]
 
 st.subheader("👤 Customer Information")
 st.text_input("Company Name",   cust["Company Name"], disabled=True)
@@ -209,7 +233,7 @@ mids   = own["ID"].tolist()
 sel_m  = st.selectbox("Select machine", ["Add new..."] + labels, key="machine")
 
 if sel_m == "Add new...":
-    st.markdown("### ➕ Add New Machine")
+    st.markdown("### ➕ Add New Machine")
     for k in ("b_sel","prev_b","m_sel","prev_m"): st.session_state.setdefault(k,"")
     brand = st.selectbox("Brand*", [""]+brands, key="b_sel")
     if brand != st.session_state.prev_b:
@@ -236,9 +260,8 @@ if sel_m == "Add new...":
             if errs:
                 st.error("\n".join(errs))
             else:
-                mid = str(uuid.uuid4())
-                p   = f"{mid}_machine.png"
-                Image.open(photo).save(p)
+                mid = str(uuid.uuid4()); path=f"{mid}_machine.png"
+                Image.open(photo).save(path)
                 new = pd.DataFrame([{
                     "ID":mid,
                     "Customer ID":customer_id,
@@ -246,12 +269,12 @@ if sel_m == "Add new...":
                     "Model":fm,
                     "Year":st.session_state.yr,
                     "Serial Number":serial,
-                    "Photo Path":p,
+                    "Photo Path":path,
                     "Observations":obs
                 }])
                 machines = pd.concat([machines,new], ignore_index=True)
-                machines.to_csv(MACHINES_FILE,index=False)
-                st.success("Machine added — please reload.")
+                machines.to_csv(MACHINES_FILE, index=False)
+                st.success("Machine added—please reload.")
                 st.stop()
 else:
     idx  = labels.index(sel_m)
@@ -295,14 +318,12 @@ else:
                 st.error("Complete all required fields & uploads.")
             else:
                 jid = str(uuid.uuid4())
-                # save files
                 sp = f"{jid}_sig.png"
                 Image.fromarray(sigimg.image_data).save(sp)
                 fp = f"{jid}_found.{found.name.rsplit('.',1)[-1]}"
                 open(fp,"wb").write(found.read())
                 lp = f"{jid}_left.{left.name.rsplit('.',1)[-1]}"
                 open(lp,"wb").write(left.read())
-                # record
                 newj = pd.DataFrame([{
                     "Job ID":jid,
                     "Customer ID":customer_id,
@@ -324,7 +345,6 @@ else:
                 jobs.to_csv(JOBS_FILE, index=False)
                 st.success("Job logged successfully!")
 
-                # build email
                 html = f"""
 <p>Dear Customer,</p>
 <p>Thank you for choosing <strong>Machine Hunter</strong> for your service needs. Below are your job details:</p>
@@ -346,7 +366,6 @@ else:
 """
                 send_job_email(jid, cust["Email"], html, sp, lp)
 
-                # preview
                 st.markdown("### Preview")
                 st.write(f"Customer: {sel_name}")
                 st.write(f"Machine: {sel_m}")
