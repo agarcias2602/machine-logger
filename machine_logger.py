@@ -4,11 +4,22 @@ import uuid
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 import os
+from datetime import datetime
 
 # File names
 CUSTOMERS_FILE = "customers.csv"
 MACHINES_FILE = "machines.csv"
 JOBS_FILE = "jobs.csv"
+
+# Updated columns
+CUSTOMERS_COLUMNS = ["ID", "Company Name", "Contact Name", "Address", "Phone", "Email"]
+MACHINES_COLUMNS = ["ID", "Customer ID", "Brand", "Model", "Year", "Serial Number", "Photo Path", "Observations"]
+JOBS_COLUMNS = [
+    "Job ID", "Customer ID", "Machine ID", "Employee Name", "Technician",
+    "Date", "Travel Time (min)", "Time In", "Time Out", "Job Description",
+    "Parts Used", "Additional Comments",
+    "Machine as Found Path", "Machine as Left Path", "Signature Path"
+]
 
 # Helpers to load or create CSVs
 def load_df(filename, columns):
@@ -17,12 +28,9 @@ def load_df(filename, columns):
     else:
         return pd.DataFrame(columns=columns)
 
-customers = load_df(CUSTOMERS_FILE, ["ID", "Company Name", "Person in Charge", "Address", "Phone", "Email"])
-machines = load_df(MACHINES_FILE, ["ID", "Customer ID", "Brand", "Model", "Year", "Photo Path", "Observations"])
-jobs = load_df(JOBS_FILE, [
-    "Job ID", "Customer ID", "Machine ID", "Employee", "Technician",
-    "Description", "Checklist", "Signature Path", "Machine Photo Path"
-])
+customers = load_df(CUSTOMERS_FILE, CUSTOMERS_COLUMNS)
+machines = load_df(MACHINES_FILE, MACHINES_COLUMNS)
+jobs = load_df(JOBS_FILE, JOBS_COLUMNS)
 
 st.title("Coffee Machine Service Logger")
 
@@ -33,17 +41,17 @@ selected_customer = st.selectbox("Select customer", ["Add new..."] + customer_op
 if selected_customer == "Add new...":
     with st.form("new_customer"):
         cname = st.text_input("Company Name")
-        contact = st.text_input("Person in Charge")
+        contact = st.text_input("Contact Name")
         address = st.text_input("Address")
         phone = st.text_input("Phone")
         email = st.text_input("Email")
         submitted = st.form_submit_button("Save Customer")
-        if submitted and cname:
+        if submitted and cname and contact:
             cid = str(uuid.uuid4())
             new_row = pd.DataFrame([{
                 "ID": cid,
                 "Company Name": cname,
-                "Person in Charge": contact,
+                "Contact Name": contact,
                 "Address": address,
                 "Phone": phone,
                 "Email": email
@@ -66,10 +74,11 @@ else:
             brand = st.text_input("Brand")
             model = st.text_input("Model")
             year = st.text_input("Year")
+            serial = st.text_input("Serial Number")
             obs = st.text_area("Observations")
             photo = st.file_uploader("Upload machine photo", type=["jpg", "jpeg", "png"])
             submitted = st.form_submit_button("Save Machine")
-            if submitted and brand and model:
+            if submitted and brand and model and serial:
                 mid = str(uuid.uuid4())
                 photo_path = ""
                 if photo:
@@ -82,6 +91,7 @@ else:
                     "Brand": brand,
                     "Model": model,
                     "Year": year,
+                    "Serial Number": serial,
                     "Photo Path": photo_path,
                     "Observations": obs
                 }])
@@ -99,18 +109,15 @@ else:
         with st.form("log_job"):
             employee = st.text_input("Employee Name")
             technician = st.selectbox("Technician", ["Adonai Garcia", "Miki Horvath"])
+            job_date = st.date_input("Date", datetime.now())
+            travel_time = st.number_input("Travel Time (minutes)", min_value=0, step=1)
+            time_in = st.time_input("Time In")
+            time_out = st.time_input("Time Out")
             desc = st.text_area("Job Description")
-            checklist = st.multiselect("Checklist", [
-                "Brew group cleaned",
-                "Grinder cleaned",
-                "Descaled",
-                "Tested all functions",
-                "Checked/cleaned filters",
-                "Inspected seals/hoses",
-                "Updated software",
-                "Checked for leaks",
-                "Wiped down exterior"
-            ])
+            parts = st.text_area("Parts Used (optional)", placeholder="Describe parts used, if any...")
+            comments = st.text_area("Additional Comments (optional)")
+            machine_found = st.file_uploader("Machine as Found (upload photo/video)", type=["jpg", "jpeg", "png", "mp4"])
+            machine_left = st.file_uploader("Machine as Left (upload photo/video)", type=["jpg", "jpeg", "png", "mp4"])
             st.write("Draw signature below then click Submit:")
             signature_image = st_canvas(
                 fill_color="rgba(255,255,255,1)",
@@ -122,31 +129,47 @@ else:
                 drawing_mode="freedraw",
                 key="signature"
             )
-            machine_photo = st.file_uploader("Upload new machine photo (optional)", type=["jpg", "jpeg", "png"])
 
             submitted = st.form_submit_button("Submit Job")
-            if submitted and employee and technician:
+            # All required fields check:
+            required_fields = all([
+                employee, technician, job_date, travel_time, time_in, time_out, desc
+            ])
+            if submitted and required_fields:
                 job_id = str(uuid.uuid4())
                 sig_path = ""
                 if signature_image.image_data is not None:
                     sig_img = Image.fromarray(signature_image.image_data)
                     sig_path = f"{job_id}_signature.png"
                     sig_img.save(sig_path)
-                photo_path = ""
-                if machine_photo:
-                    img = Image.open(machine_photo)
-                    photo_path = f"{job_id}_jobmachine.png"
-                    img.save(photo_path)
+                found_path = ""
+                if machine_found:
+                    ext = machine_found.name.split(".")[-1].lower()
+                    found_path = f"{job_id}_found.{ext}"
+                    with open(found_path, "wb") as f:
+                        f.write(machine_found.read())
+                left_path = ""
+                if machine_left:
+                    ext = machine_left.name.split(".")[-1].lower()
+                    left_path = f"{job_id}_left.{ext}"
+                    with open(left_path, "wb") as f:
+                        f.write(machine_left.read())
                 new_job_row = pd.DataFrame([{
                     "Job ID": job_id,
                     "Customer ID": customer_id,
                     "Machine ID": selected_machine_id,
-                    "Employee": employee,
+                    "Employee Name": employee,
                     "Technician": technician,
-                    "Description": desc,
-                    "Checklist": ";".join(checklist),
-                    "Signature Path": sig_path,
-                    "Machine Photo Path": photo_path
+                    "Date": str(job_date),
+                    "Travel Time (min)": int(travel_time),
+                    "Time In": str(time_in),
+                    "Time Out": str(time_out),
+                    "Job Description": desc,
+                    "Parts Used": parts,
+                    "Additional Comments": comments,
+                    "Machine as Found Path": found_path,
+                    "Machine as Left Path": left_path,
+                    "Signature Path": sig_path
                 }])
                 jobs = pd.concat([jobs, new_job_row], ignore_index=True)
                 jobs.to_csv(JOBS_FILE, index=False)
@@ -158,12 +181,25 @@ else:
                 st.write(f"Machine: {selected_machine_label}")
                 st.write(f"Employee: {employee}")
                 st.write(f"Technician: {technician}")
-                st.write(f"Description: {desc}")
-                st.write(f"Checklist: {', '.join(checklist)}")
+                st.write(f"Date: {job_date}")
+                st.write(f"Travel Time: {travel_time} min")
+                st.write(f"Time In: {time_in}")
+                st.write(f"Time Out: {time_out}")
+                st.write(f"Job Description: {desc}")
+                if parts: st.write(f"Parts Used: {parts}")
+                if comments: st.write(f"Additional Comments: {comments}")
                 if sig_path:
                     st.image(sig_path, caption="Signature", width=150)
-                if photo_path:
-                    st.image(photo_path, caption="Machine Photo", width=150)
+                if found_path and os.path.exists(found_path):
+                    if found_path.endswith(".mp4"):
+                        st.video(found_path, format="video/mp4")
+                    else:
+                        st.image(found_path, caption="Machine as Found", width=150)
+                if left_path and os.path.exists(left_path):
+                    if left_path.endswith(".mp4"):
+                        st.video(left_path, format="video/mp4")
+                    else:
+                        st.image(left_path, caption="Machine as Left", width=150)
 
 # --- At the very END of your file ---
 
@@ -172,16 +208,24 @@ tab1, tab2, tab3 = st.tabs(["All Jobs", "All Customers", "All Machines"])
 with tab1:
     st.header("All Job Logs")
     st.dataframe(jobs)
-    # Show images for last job as an example
+    # Show images/videos for last job as an example
     if not jobs.empty:
         last = jobs.iloc[-1]
         sig_path = last.get("Signature Path", "")
         if isinstance(sig_path, str) and sig_path and os.path.exists(sig_path):
             st.image(sig_path, caption="Last Job Signature", width=200)
-        photo_path = last.get("Machine Photo Path", "")
-        if isinstance(photo_path, str) and photo_path and os.path.exists(photo_path):
-            st.image(photo_path, caption="Last Job Machine Photo", width=200)
-
+        found_path = last.get("Machine as Found Path", "")
+        if isinstance(found_path, str) and found_path and os.path.exists(found_path):
+            if found_path.endswith(".mp4"):
+                st.video(found_path, format="video/mp4")
+            else:
+                st.image(found_path, caption="Machine as Found", width=200)
+        left_path = last.get("Machine as Left Path", "")
+        if isinstance(left_path, str) and left_path and os.path.exists(left_path):
+            if left_path.endswith(".mp4"):
+                st.video(left_path, format="video/mp4")
+            else:
+                st.image(left_path, caption="Machine as Left", width=200)
 
 with tab2:
     st.header("All Customers")
@@ -190,4 +234,3 @@ with tab2:
 with tab3:
     st.header("All Machines")
     st.dataframe(machines)
-
