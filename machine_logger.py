@@ -30,7 +30,7 @@ jobs      = load_df(JOBS_FILE,      JOBS_COLUMNS)
 
 st.title("Coffee Machine Service Logger")
 
-# --- Brands & Models Data (alphabetical, 'Other' last) ---
+# --- Brands & models ---
 coffee_brands = {
     "Bezzera": ["BZ10","DUO","Magica","Matrix","Mitica"],
     "Breville": ["Barista Express","Barista Pro","Duo Temp","Infuser","Oracle Touch"],
@@ -58,13 +58,13 @@ coffee_brands = {
     "WMF": ["1100 S","1500 S+","5000 S+","9000 S+","Espresso"],
     "Other": ["Other"]
 }
-brands_no_other = sorted([b for b in coffee_brands if b!="Other"])
+brands_no_other = sorted([b for b in coffee_brands if b != "Other"])
 brand_order = brands_no_other + ["Other"]
 for b in coffee_brands:
-    models = sorted([m for m in coffee_brands[b] if m!="Other"])
+    ms = sorted([m for m in coffee_brands[b] if m != "Other"])
     if "Other" in coffee_brands[b]:
-        models.append("Other")
-    coffee_brands[b] = models
+        ms.append("Other")
+    coffee_brands[b] = ms
 
 # Year options
 current_year = datetime.now().year
@@ -119,50 +119,45 @@ else:
     # -------------------- MACHINE FORM --------------------
     cid = customers.loc[customers["Company Name"] == sel_cust, "ID"].iat[0]
     cust_machines = machines[machines["Customer ID"] == cid]
-    machine_labels = [f"{r.Brand} ({r.Model})" for _, r in cust_machines.iterrows()]
-    machine_ids    = cust_machines["ID"].tolist()
+    labels = [f"{r.Brand} ({r.Model})" for _, r in cust_machines.iterrows()]
+    ids    = cust_machines["ID"].tolist()
 
-    # Ensure session flags
+    # session flag
     if "edit_machine" not in st.session_state:
         st.session_state.edit_machine = False
 
-    # If no machines exist, immediate add form
     if cust_machines.empty:
         st.info("No machines for this customer—please add one below")
         do_add = True
-        selected_existing = None
     else:
-        # Let user pick existing or add new
-        selected_existing = st.selectbox(
-            "Select machine",
-            ["Add new..."] + machine_labels,
-            key="machine_select"
-        )
+        selected_existing = st.selectbox("Select machine",
+                                         ["Add new..."] + labels,
+                                         key="machine_select")
         do_add = (selected_existing == "Add new...")
 
-    # --- ADD NEW MACHINE FORM ---
+    # --- Add New Machine ---
     if do_add:
         with st.form("add_machine"):
             st.info("Add a new machine for this customer")
-            # Brand & Model selectors
+
             brand = st.selectbox("Brand*", [""] + brand_order, key="add_brand")
             custom_brand = st.text_input("Enter new brand*", key="add_custom_brand") if brand=="Other" else ""
             if brand in coffee_brands:
-                model_opts = coffee_brands[brand]
+                opts = coffee_brands[brand]
             elif brand=="Other":
-                model_opts = ["Other"]
+                opts = ["Other"]
             else:
-                model_opts = []
-            model = st.selectbox("Model*", [""] + model_opts, key="add_model")
+                opts = []
+            model = st.selectbox("Model*", [""] + opts, key="add_model")
             custom_model = st.text_input("Enter new model*", key="add_custom_model") if model=="Other" else ""
-            year   = st.selectbox("Year*", [""] + [str(y) for y in years], key="add_year")
+            year   = st.selectbox("Year*", [""]+[str(y) for y in years], key="add_year")
             serial = st.text_input("Serial Number (optional)", key="add_serial")
             obs    = st.text_area("Observations (optional)", key="add_obs")
             photo  = st.file_uploader("Upload machine photo*", type=["jpg","png"], key="add_photo")
 
             errs = []
             final_brand = custom_brand.strip() if brand=="Other" else brand
-            final_model = custom_model.strip() if model=="Other" else model
+            final_model = custom_model.strip()  if model=="Other" else model
             if not final_brand: errs.append("Brand is required.")
             if not final_model: errs.append("Model is required.")
             if not st.session_state.add_year: errs.append("Year is required.")
@@ -192,98 +187,83 @@ else:
                     st.stop()
 
     else:
-        # -------------------- EDIT / VIEW EXISTING MACHINE --------------------
-        idx = machine_labels.index(selected_existing)
+        # --- View or Edit Existing Machine ---
+        idx = labels.index(selected_existing)
         mrow = cust_machines.iloc[idx]
 
         if not st.session_state.edit_machine:
-            # Read-only display
-            # ─── Read‑only display ───
-            st.text_input(
-                "Brand",
-                value=mrow.get("Brand", ""),
-                disabled=True
-            )
-            st.text_input(
-                "Model",
-                value=mrow.get("Model", ""),
-                disabled=True
-            )
-            st.text_input(
-                "Year",
-                value=mrow.get("Year", ""),
-                disabled=True
-            )
-            st.text_input(
-                "Serial Number",
-                value=mrow.get("Serial Number", ""),
-                disabled=True
-            )
-            st.text_area(
-                "Observations",
-                value=mrow.get("Observations", ""),
-                disabled=True
-            )
-            photo_path = mrow.get("Photo Path", "")
-            if isinstance(photo_path, str) and photo_path and os.path.exists(photo_path):
+            st.text_input("Brand", value=mrow.get("Brand",""), disabled=True)
+            st.text_input("Model", value=mrow.get("Model",""), disabled=True)
+            st.text_input("Year", value=mrow.get("Year",""), disabled=True)
+            st.text_input("Serial Number", value=mrow.get("Serial Number",""), disabled=True)
+            st.text_area("Observations", value=mrow.get("Observations",""), disabled=True)
+            photo_path = mrow.get("Photo Path","")
+            if isinstance(photo_path,str) and photo_path and os.path.exists(photo_path):
                 st.image(photo_path, caption="Machine Photo", width=200)
-
             if st.button("Edit Machine"):
                 st.session_state.edit_machine = True
 
         else:
-            # Edit form
             with st.form("edit_machine"):
                 st.info("Edit machine details")
                 brand = st.selectbox(
-                    "Brand*",
-                    [""]+brand_order,
-                    index=(brand_order.index(mrow["Brand"])+1) if mrow["Brand"] in brand_order else 0,
+                    "Brand*", [""]+brand_order,
+                    index=(brand_order.index(mrow.get("Brand",""))+1)
+                          if mrow.get("Brand","") in brand_order else 0,
                     key="edit_brand"
                 )
                 custom_brand = st.text_input("Enter new brand*", key="edit_custom_brand") if brand=="Other" else ""
                 if brand in coffee_brands:
                     opts = coffee_brands[brand]
                 elif brand=="Other":
-                    opts=["Other"]
+                    opts = ["Other"]
                 else:
-                    opts=[]
+                    opts = []
                 model = st.selectbox(
-                    "Model*",
-                    [""]+opts,
-                    index=(opts.index(mrow["Model"])+1) if mrow["Model"] in opts else 0,
+                    "Model*", [""]+opts,
+                    index=(opts.index(mrow.get("Model",""))+1)
+                          if mrow.get("Model","") in opts else 0,
                     key="edit_model"
                 )
                 custom_model = st.text_input("Enter new model*", key="edit_custom_model") if model=="Other" else ""
-                year   = st.selectbox(
-                    "Year*",
-                    [""]+[str(y) for y in years],
-                    index=(years.index(int(mrow["Year"]))+1) if str(mrow["Year"]) in [str(y) for y in years] else 0,
+                year = st.selectbox(
+                    "Year*", [""]+[str(y) for y in years],
+                    index=(years.index(int(mrow.get("Year",current_year)))+1)
+                          if str(mrow.get("Year","")) in [str(y) for y in years] else 0,
                     key="edit_year"
                 )
-                serial = st.text_input("Serial Number (optional)", value=mrow["Serial Number"], key="edit_serial")
-                obs    = st.text_area("Observations (optional)", value=mrow["Observations"], key="edit_obs")
-                photo  = st.file_uploader("Upload new machine photo (leave empty to keep)", type=["jpg","png"], key="edit_photo")
+                serial = st.text_input(
+                    "Serial Number (optional)",
+                    value=mrow.get("Serial Number",""),
+                    key="edit_serial"
+                )
+                obs = st.text_area(
+                    "Observations (optional)",
+                    value=mrow.get("Observations",""),
+                    key="edit_obs"
+                )
+                photo = st.file_uploader(
+                    "Upload new machine photo (leave empty to keep)",
+                    type=["jpg","png"],
+                    key="edit_photo"
+                )
 
-                errs=[]
+                errs = []
                 final_brand = custom_brand.strip() if brand=="Other" else brand
-                final_model = custom_model.strip() if model=="Other" else model
+                final_model = custom_model.strip()  if model=="Other" else model
                 if not final_brand: errs.append("Brand is required.")
                 if not final_model: errs.append("Model is required.")
                 if not st.session_state.edit_year: errs.append("Year is required.")
-
                 sub3 = st.form_submit_button("Save Changes")
                 if sub3:
                     if errs:
                         st.error("\n".join(errs))
                     else:
-                        # Update DataFrame
                         machines.loc[machines["ID"]==mrow["ID"], ["Brand","Model","Year","Serial Number","Observations"]] = [
                             final_brand, final_model,
                             st.session_state.edit_year,
                             serial, obs
                         ]
-                        # Replace photo if new one provided
                         if photo:
                             pth = f"{mrow['ID']}_machine.png"
                             Image.open(photo).save(pth)
@@ -293,8 +273,8 @@ else:
                         st.session_state.edit_machine = False
                         st.experimental_rerun()
 
-        # -------------------- JOB FORM --------------------
         if not st.session_state.edit_machine:
+            # -------------------- JOB FORM --------------------
             st.subheader("Log a Job")
             with st.form("log_job"):
                 employee   = st.text_input("Employee Name")
@@ -318,10 +298,10 @@ else:
                 sub4 = st.form_submit_button("Submit Job")
                 req  = all([employee, technician, job_date, travel, t_in, t_out, desc])
                 if sub4 and req:
-                    jid = str(uuid.uuid4())
+                    jid    = str(uuid.uuid4())
                     sigpth = ""
                     if sigimg.image_data is not None:
-                        im   = Image.fromarray(sigimg.image_data)
+                        im    = Image.fromarray(sigimg.image_data)
                         sigpth = f"{jid}_signature.png"; im.save(sigpth)
                     fpth = ""
                     if found:
@@ -357,19 +337,19 @@ else:
                     st.write(f"Job Description: {desc}")
                     if parts:    st.write(f"Parts Used: {parts}")
                     if comments: st.write(f"Additional Comments: {comments}")
-                    if sigpth:   st.image(sigpth,caption="Signature",width=150)
+                    if sigpth:   st.image(sigpth, caption="Signature", width=150)
                     if fpth and os.path.exists(fpth):
                         if fpth.endswith(".mp4"): st.video(fpth)
-                        else: st.image(fpth,caption="Machine as Found",width=150)
+                        else: st.image(fpth, caption="Machine as Found", width=150)
                     if lpth and os.path.exists(lpth):
                         if lpth.endswith(".mp4"): st.video(lpth)
-                        else: st.image(lpth,caption="Machine as Left",width=150)
+                        else: st.image(lpth, caption="Machine as Left", width=150)
 
 # --- Admin Tabs ---
-t1, t2, t3 = st.tabs(["All Jobs","All Customers","All Machines"])
-with t1:
+tab1, tab2, tab3 = st.tabs(["All Jobs","All Customers","All Machines"])
+with tab1:
     st.header("All Job Logs");      st.dataframe(jobs)
-with t2:
+with tab2:
     st.header("All Customers");     st.dataframe(customers)
-with t3:
+with tab3:
     st.header("All Machines");      st.dataframe(machines)
