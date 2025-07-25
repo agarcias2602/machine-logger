@@ -198,11 +198,32 @@ else:
 
         if not st.session_state.edit_machine:
             # Read-only display
-            st.text_input("Brand", value=mrow["Brand"], disabled=True)
-            st.text_input("Model", value=mrow["Model"], disabled=True)
-            st.text_input("Year", value=mrow["Year"], disabled=True)
-            st.text_input("Serial Number", value=mrow["Serial Number"], disabled=True)
-            st.text_area("Observations", value=mrow["Observations"], disabled=True)
+            # ─── Read‑only display ───
+            st.text_input(
+                "Brand",
+                value=mrow.get("Brand", ""),
+                disabled=True
+            )
+            st.text_input(
+                "Model",
+                value=mrow.get("Model", ""),
+                disabled=True
+            )
+            st.text_input(
+                "Year",
+                value=mrow.get("Year", ""),
+                disabled=True
+            )
+            st.text_input(
+                "Serial Number",
+                value=mrow.get("Serial Number", ""),
+                disabled=True
+            )
+            st.text_area(
+                "Observations",
+                value=mrow.get("Observations", ""),
+                disabled=True
+            )
             if mrow["Photo Path"] and os.path.exists(mrow["Photo Path"]):
                 st.image(mrow["Photo Path"], caption="Machine Photo", width=200)
             if st.button("Edit Machine"):
