@@ -224,8 +224,10 @@ else:
                 value=mrow.get("Observations", ""),
                 disabled=True
             )
-            if mrow["Photo Path"] and os.path.exists(mrow["Photo Path"]):
-                st.image(mrow["Photo Path"], caption="Machine Photo", width=200)
+            photo_path = mrow.get("Photo Path", "")
+            if isinstance(photo_path, str) and photo_path and os.path.exists(photo_path):
+                st.image(photo_path, caption="Machine Photo", width=200)
+
             if st.button("Edit Machine"):
                 st.session_state.edit_machine = True
 
