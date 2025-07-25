@@ -347,92 +347,77 @@ if mode == "select":
 
 
 # ——— 2) ADD CUSTOMER ———
-
 if mode == "add":
-
     st.header("➕ Add New Customer")
-
     with st.form("add_cust"):
-
         cname   = st.text_input("Company Name*")
-
         contact = st.text_input("Contact Name*")
-
         addr    = st.text_input("Address*")
-
         phone   = st.text_input("Phone* (000-000-0000)")
-
         email   = st.text_input("Email*")
+        submit  = st.form_submit_button("Save Customer")
 
-        errs=[]
+        if submit:
+            # ——— validate inputs ———
+            errs = []
+            if not cname.strip():   errs.append("Company Name required.")
+            if not contact.strip(): errs.append("Contact Name required.")
+            if not re.match(r'.+\d+.+', addr) or len(addr.split()) < 3:
+                errs.append("Valid address required.")
+            if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
+                errs.append("Phone must be 000-000-0000.")
+            if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
+                errs.append("Valid email required.")
 
-        if not cname.strip(): errs.append("Company Name required.")
+            if errs:
+                st.error("\n".join(errs))
+            else:
+                # ——— append & save ———
+                cid = str(uuid.uuid4())
+                new_row = {
+                    "ID": cid,
+                    "Company Name": cname.strip(),
+                    "Contact Name": contact.strip(),
+                    "Address": addr.strip(),
+                    "Phone": phone.strip(),
+                    "Email": email.strip()
+                }
+                # reload to get any other concurrent changes, then append
+                customers = load_df(CUSTOMERS_FILE, CUSTOMERS_COLUMNS)
+                customers = pd.concat([customers, pd.DataFrame([new_row])],
+                                      ignore_index=True)
+                customers.to_csv(CUSTOMERS_FILE, index=False)
 
-        if not contact.strip(): errs.append("Contact Name required.")
+                # ——— geocode & update session ———
+                try:
+                    loc = Nominatim(user_agent="machine_logger") \
+                               .geocode(addr, timeout=10)
+                    st.session_state.coords[cid] = (
+                        (loc.latitude, loc.longitude)
+                        if loc else (None, None)
+                    )
+                except Exception:
+                    st.session_state.coords[cid] = (None, None)
 
-        if not re.match(r'.+\d+.+', addr) or len(addr.split())<3:
+                # ——— back to map view ———
+                st.session_state.mode = "select"
+                st.session_state.selected_customer = None
+                st.experimental_rerun()
 
-            errs.append("Valid address required.")
+        else:
+            # only show a Google‑Maps preview once all fields are filled and valid
+            if (cname and contact and addr and phone and email and
+                re.match(r'.+\d+.+', addr) and
+                re.match(r'^\d{3}-\d{3}-\d{4}$', phone) and
+                re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email)):
+                st.markdown(
+                    f"[Preview on Google Maps]"
+                    f"(https://www.google.com/maps/search/"
+                    f"{addr.replace(' ','+')})"
+                )
 
-        if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
-
-            errs.append("Phone must be 000-000-0000.")
-
-        if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
-
-            errs.append("Valid email required.")
-
-        if not errs:
-
-            st.markdown(f"[Preview on Google Maps]("
-
-                        f"https://www.google.com/maps/search/{addr.replace(' ','+')})")
-
-        if st.form_submit_button("Save Customer") and not errs:
-
-            # save
-
-            cid = str(uuid.uuid4())
-
-            new = pd.DataFrame([{
-
-                "ID":cid,
-
-                "Company Name":cname,
-
-                "Contact Name":contact,
-
-                "Address":addr,
-
-                "Phone":phone,
-
-                "Email":email
-
-            }])
-
-            customers=pd.concat([customers,new],ignore_index=True)
-
-            customers.to_csv(CUSTOMERS_FILE,index=False)
-
-            # geocode and update session coords
-
-            try:
-
-                loc = Nominatim(user_agent="machine_logger").geocode(addr, timeout=10)
-
-                st.session_state.coords[cid] = (loc.latitude, loc.longitude) if loc else (None,None)
-
-            except:
-
-                st.session_state.coords[cid] = (None,None)
-
-            # switch back to map
-
-            st.session_state.mode = "select"
-
-            st.session_state.selected_customer = None
-
-            st.experimental_rerun()
+    # prevent fall‑through into the “existing customer” logic
+    st.stop()
 
 
 
