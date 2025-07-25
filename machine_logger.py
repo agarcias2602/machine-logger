@@ -33,8 +33,7 @@ st.title("Coffee Machine Service Logger")
 # --- Brands & Models Data ---
 coffee_brands = {
     "Bezzera": ["BZ10","DUO","Magica","Matrix","Mitica"],
-    # ... (rest as before) ...
-    "WMF": ["1100 S","1500 S+","5000 S+","9000 S+","Espresso"],
+    # ... your full list ...
     "Other": ["Other"]
 }
 brands_no_other = sorted([b for b in coffee_brands if b!="Other"])
@@ -54,7 +53,7 @@ cust_opts = customers["Company Name"].tolist()
 sel_cust  = st.selectbox("Select customer", ["Add new..."] + cust_opts)
 
 if sel_cust == "Add new...":
-    with st.form("new_cust"):
+    with st.form("new_customer_form"):
         cname   = st.text_input("Company Name*")
         contact = st.text_input("Contact Name*")
         addr    = st.text_input("Address* (e.g. 123 Main St, City)")
@@ -75,8 +74,8 @@ if sel_cust == "Add new...":
             murl = f"https://www.google.com/maps/search/{addr.replace(' ','+')}"
             st.markdown(f"[Preview on Google Maps]({murl})")
 
-        sub = st.form_submit_button("Save Customer")
-        if sub and not errs:
+        submitted = st.form_submit_button("Save Customer")
+        if submitted and not errs:
             cid = str(uuid.uuid4())
             new = pd.DataFrame([{
                 "ID": cid,
@@ -98,12 +97,15 @@ else:
     labels = [f"{r.Brand} ({r.Model})" for _, r in cust_machines.iterrows()]
     ids    = cust_machines["ID"].tolist()
 
-    # Session-state flags
-    if "prev_selected"  not in st.session_state: st.session_state.prev_selected  = None
-    if "edit_machine"   not in st.session_state: st.session_state.edit_machine   = False
-    if "view_job"       not in st.session_state: st.session_state.view_job       = False
+    # Initialize session flags
+    if "machine_edit_mode" not in st.session_state:
+        st.session_state.machine_edit_mode = False
+    if "job_mode" not in st.session_state:
+        st.session_state.job_mode = False
+    if "prev_machine" not in st.session_state:
+        st.session_state.prev_machine = None
 
-    # Selection of existing vs add
+    # If machines exist, let user pick; otherwise go straight to add
     if cust_machines.empty:
         st.info("No machines for this customer—please add one below")
         do_add = True
@@ -116,17 +118,16 @@ else:
         )
         do_add = (selected_existing == "Add new...")
 
-    # Reset flags on machine re-selection
-    if selected_existing != st.session_state.prev_selected:
-        st.session_state.prev_selected  = selected_existing
-        st.session_state.edit_machine   = False
-        st.session_state.view_job       = False
+    # Reset modes when selection changes
+    if selected_existing != st.session_state.prev_machine:
+        st.session_state.prev_machine       = selected_existing
+        st.session_state.machine_edit_mode  = False
+        st.session_state.job_mode           = False
 
-    # ADD NEW MACHINE FLOW
+    # --- ADD NEW MACHINE ---
     if do_add:
-        with st.form("add_machine"):
+        with st.form("add_machine_form"):
             st.info("Add a new machine for this customer")
-
             brand = st.selectbox("Brand*", [""] + brand_order, key="add_brand")
             custom_brand = st.text_input("Enter new brand*", key="add_custom_brand") if brand=="Other" else ""
             opts = coffee_brands.get(brand, ["Other"] if brand=="Other" else [])
@@ -145,8 +146,8 @@ else:
             if not st.session_state.add_year: errs.append("Year is required.")
             if not photo: errs.append("Photo is required.")
 
-            sub2 = st.form_submit_button("Save Machine")
-            if sub2 and not errs:
+            submitted = st.form_submit_button("Save Machine")
+            if submitted and not errs:
                 mid = str(uuid.uuid4())
                 pth = f"{mid}_machine.png"
                 Image.open(photo).save(pth)
@@ -166,29 +167,28 @@ else:
                 st.stop()
 
     else:
-        # VIEW vs EDIT vs JOB
+        # --- VIEW EXISTING MACHINE DETAILS FIRST ---
         idx  = labels.index(selected_existing)
         mrow = cust_machines.iloc[idx]
 
-        # Read-only display + Continue/Edit
-        if not st.session_state.edit_machine and not st.session_state.view_job:
-            st.text_input("Brand", value=mrow.get("Brand",""), disabled=True)
-            st.text_input("Model", value=mrow.get("Model",""), disabled=True)
-            st.text_input("Year", value=mrow.get("Year",""), disabled=True)
+        if not st.session_state.machine_edit_mode and not st.session_state.job_mode:
+            st.text_input("Brand",         value=mrow.get("Brand",""),         disabled=True)
+            st.text_input("Model",         value=mrow.get("Model",""),         disabled=True)
+            st.text_input("Year",          value=mrow.get("Year",""),          disabled=True)
             st.text_input("Serial Number", value=mrow.get("Serial Number",""), disabled=True)
-            st.text_area("Observations", value=mrow.get("Observations",""), disabled=True)
+            st.text_area("Observations",   value=mrow.get("Observations",""),   disabled=True)
             photo_path = mrow.get("Photo Path","")
             if isinstance(photo_path,str) and photo_path and os.path.exists(photo_path):
                 st.image(photo_path, caption="Machine Photo", width=200)
             col1, col2 = st.columns(2)
             if col1.button("Continue to Job"):
-                st.session_state.view_job = True
+                st.session_state.job_mode = True
             if col2.button("Edit Machine"):
-                st.session_state.edit_machine = True
+                st.session_state.machine_edit_mode = True
 
-        # EDIT FORM
-        if st.session_state.edit_machine:
-            with st.form("edit_machine"):
+        # --- EDIT MACHINE FORM ---
+        if st.session_state.machine_edit_mode:
+            with st.form("edit_machine_form"):
                 st.info("Edit machine details")
                 brand = st.selectbox(
                     "Brand*", [""]+brand_order,
@@ -246,13 +246,13 @@ else:
                         machines.loc[machines["ID"]==mrow["ID"], "Photo Path"] = pth
                     machines.to_csv(MACHINES_FILE, index=False)
                     st.success("Machine updated!")
-                    st.session_state.edit_machine = False
+                    st.session_state.machine_edit_mode = False
                     st.experimental_rerun()
 
-        # JOB FORM
-        if not st.session_state.edit_machine and st.session_state.view_job:
+        # --- JOB FORM ---
+        if not st.session_state.machine_edit_mode and st.session_state.job_mode:
             st.subheader("Log a Job")
-            with st.form("log_job"):
+            with st.form("log_job_form"):
                 employee   = st.text_input("Employee Name")
                 technician = st.selectbox("Technician", ["Adonai Garcia","Miki Horvath"])
                 job_date   = st.date_input("Date", datetime.now())
