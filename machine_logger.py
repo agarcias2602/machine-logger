@@ -58,7 +58,6 @@ coffee_brands = {
     "WMF": ["1100 S","1500 S+","5000 S+","9000 S+","Espresso"],
     "Other": ["Other"]
 }
-# Alphabetize brands (Other last) and models
 brands_no_other = sorted([b for b in coffee_brands if b!="Other"])
 brand_order     = brands_no_other + ["Other"]
 for b in coffee_brands:
@@ -84,7 +83,7 @@ if sel_cust == "Add new...":
         email   = st.text_input("Email* (you@example.com)")
 
         errs = []
-        if not cname.strip():   errs.append("Company Name required.")
+        if not cname.strip(): errs.append("Company Name required.")
         if not contact.strip(): errs.append("Contact Name required.")
         if not re.match(r'.+\d+.+', addr) or len(addr.split())<3:
             errs.append("Enter a real address.")
@@ -132,46 +131,76 @@ else:
     selected_label = st.selectbox("Select machine", ["Add new..."] + machine_labels)
 
     if selected_label == "Add new...":
+        # --- BRAND & MODEL SELECTORS outside the form ---
+        for key in ("brand_select","prev_brand","model_select","custom_brand","custom_model"):
+            if key not in st.session_state:
+                st.session_state[key] = ""
+
+        brand = st.selectbox(
+            "Brand*",
+            [""] + brand_order,
+            key="brand_select"
+        )
+        if brand != st.session_state.prev_brand:
+            st.session_state.prev_brand     = brand
+            st.session_state.model_select   = ""
+            st.session_state.custom_model   = ""
+            st.session_state.custom_brand   = ""
+
+        custom_brand = ""
+        if brand == "Other":
+            custom_brand = st.text_input("Enter new brand*", key="custom_brand")
+
+        model_opts = coffee_brands.get(brand, ["Other"] if brand=="Other" else [])
+        model = st.selectbox(
+            "Model*",
+            [""] + model_opts,
+            key="model_select"
+        )
+        custom_model = ""
+        if model == "Other":
+            custom_model = st.text_input("Enter new model*", key="custom_model")
+
+        # --- REST OF FORM ---
         with st.form("new_machine"):
-            brand = st.selectbox("Brand*", [""] + brand_order)
-            custom_b = st.text_input("New brand*") if brand == "Other" else ""
-            opts = coffee_brands.get(brand, ["Other"] if brand == "Other" else [])
-            model = st.selectbox("Model*", [""] + opts)
-            custom_m = st.text_input("New model*") if model == "Other" else ""
-            year   = st.selectbox("Year*", [""] + [str(y) for y in years])
-            serial = st.text_input("Serial Number (opt)")
-            obs    = st.text_area("Observations (opt)")
-            photo  = st.file_uploader("Machine photo*", type=["jpg","png"])
+            year   = st.selectbox("Year*", [""] + [str(y) for y in years], key="year")
+            serial = st.text_input("Serial Number (optional)", key="serial")
+            obs    = st.text_area("Observations (optional)", key="obs")
+            photo  = st.file_uploader("Machine photo*", type=["jpg","png"], key="photo")
 
-            errs = []
-            fb = custom_b.strip() if brand == "Other" else brand
-            fm = custom_m.strip() if model == "Other" else model
-            if not fb: errs.append("Brand required.")
-            if not fm: errs.append("Model required.")
-            if not year: errs.append("Year required.")
-            if not photo: errs.append("Photo required.")
+            errs=[]
+            final_brand = custom_brand.strip() if brand=="Other" else brand
+            final_model = custom_model.strip()  if model=="Other" else model
+            if not final_brand: errs.append("Brand is required.")
+            if not final_model: errs.append("Model is required.")
+            if not st.session_state.year: errs.append("Year is required.")
+            if not photo: errs.append("Photo is required.")
 
-            sub2 = st.form_submit_button("Save Machine")
-            if sub2 and not errs:
-                mid = str(uuid.uuid4())
-                path = f"{mid}_machine.png"
-                Image.open(photo).save(path)
-                new = pd.DataFrame([{
-                    "ID": mid,
-                    "Customer ID": customer_id,
-                    "Brand": fb,
-                    "Model": fm,
-                    "Year": year,
-                    "Serial Number": serial,
-                    "Photo Path": path,
-                    "Observations": obs
-                }])
-                machines = pd.concat([machines, new], ignore_index=True)
-                machines.to_csv(MACHINES_FILE, index=False)
-                st.success("Machine saved! Reload to select.")
-                st.stop()
+            submitted = st.form_submit_button("Save Machine")
+            if submitted:
+                if errs:
+                    st.error("\n".join(errs))
+                else:
+                    mid = str(uuid.uuid4())
+                    path = f"{mid}_machine.png"
+                    Image.open(photo).save(path)
+                    row = pd.DataFrame([{
+                        "ID": mid,
+                        "Customer ID": customer_id,
+                        "Brand": final_brand,
+                        "Model": final_model,
+                        "Year": st.session_state.year,
+                        "Serial Number": serial,
+                        "Photo Path": path,
+                        "Observations": obs
+                    }])
+                    machines = pd.concat([machines, row], ignore_index=True)
+                    machines.to_csv(MACHINES_FILE, index=False)
+                    st.success("Machine saved! Reload to select.")
+                    st.stop()
 
     else:
+        # --- VIEW MACHINE INFO ---
         idx  = machine_labels.index(selected_label)
         mrow = existing.iloc[idx]
 
@@ -180,12 +209,12 @@ else:
         st.text_input("Model",         value=mrow.get("Model",""),         disabled=True)
         st.text_input("Year",          value=mrow.get("Year",""),          disabled=True)
         st.text_input("Serial Number", value=mrow.get("Serial Number",""), disabled=True)
-        st.text_area("Observations",    value=mrow.get("Observations",""), disabled=True)
+        st.text_area("Observations",    value=mrow.get("Observations",""),  disabled=True)
         photo_path = mrow.get("Photo Path","")
-        if isinstance(photo_path, str) and photo_path and os.path.exists(photo_path):
+        if isinstance(photo_path, str) and os.path.exists(photo_path):
             st.image(photo_path, caption="Machine Photo", width=200)
 
-        # -------------------- JOB LOGGING FORM --------------------
+        # --- JOB LOGGING FORM ---
         st.subheader("Log a Job")
         with st.form("log_job"):
             employee   = st.text_input("Employee Name")
@@ -202,8 +231,7 @@ else:
             sigimg     = st_canvas(
                             fill_color="rgba(255,255,255,1)",
                             stroke_width=2, stroke_color="#000",
-                            background_color="#fff",
-                            height=100, width=300,
+                            background_color="#fff", height=100, width=300,
                             drawing_mode="freedraw", key="signature"
                          )
 
@@ -247,6 +275,7 @@ else:
                 jobs = pd.concat([jobs, new_job], ignore_index=True)
                 jobs.to_csv(JOBS_FILE, index=False)
                 st.success("Job logged successfully!")
+
                 st.markdown("### Preview")
                 st.write(f"Customer: {sel_cust}")
                 st.write(f"Machine: {selected_label}")
@@ -255,7 +284,7 @@ else:
                 st.write(f"Date: {job_date}")
                 st.write(f"Travel Time: {travel} min")
                 st.write(f"Time In: {time_in}  Time Out: {time_out}")
-                st.write(f"Description: {desc}")
+                st.write(f"Job Description: {desc}")
                 if parts:    st.write(f"Parts Used: {parts}")
                 if comments: st.write(f"Additional Comments: {comments}")
                 if sig_path: st.image(sig_path, caption="Signature", width=150)
