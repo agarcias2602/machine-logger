@@ -33,7 +33,32 @@ jobs = load_df(JOBS_FILE, JOBS_COLUMNS)
 
 st.title("Coffee Machine Service Logger")
 
-### --- CUSTOMER MANAGEMENT ---
+# ------------------ Coffee brands and models ------------------
+coffee_brands = {
+    "Schaerer": ["Coffee Club", "Coffee Art Plus", "Soul", "Prime", "Touch"],
+    "Jura": ["Giga X8", "ENA 8", "Impressa XJ9", "WE8", "Z10"],
+    "La Marzocco": ["Linea Mini", "GS3", "Strada", "Linea PB", "GB5"],
+    "Nuova Simonelli": ["Aurelia", "Appia", "Oscar", "Musica", "Talento"],
+    "DeLonghi": ["Magnifica", "Dinamica", "Primadonna", "Eletta", "La Specialista"],
+    "Saeco": ["Royal", "Aulika", "Lirika", "PicoBaristo", "Incanto"],
+    "Gaggia": ["Classic", "Anima", "Babila", "Accademia", "Cadorna"],
+    "Rancilio": ["Silvia", "Classe 5", "Classe 9", "Egro One", "Classe 11"],
+    "Breville": ["Barista Express", "Barista Pro", "Oracle Touch", "Duo Temp", "Infuser"],
+    "Krups": ["EA89", "EA82", "Evidence", "Quattro Force", "Essential"],
+    "Rocket Espresso": ["Appartamento", "R58", "Mozzafiato", "Giotto", "Cronometro"],
+    "La Spaziale": ["S1 Mini Vivaldi II", "S2", "S9", "Dream", "S8"],
+    "Cimbali": ["M39", "M100", "M200", "M21 Junior", "S20"],
+    "Faema": ["E61", "Teorema", "Emblema", "E98 UP", "X30"],
+    "Victoria Arduino": ["Black Eagle", "Eagle One", "Venus", "Mythos One", "Adonis"],
+    "Carimali": ["BlueDot", "SolarTouch", "Armonia Ultra", "Optima", "CA1000"],
+    "WMF": ["1500 S+", "5000 S+", "Espresso", "9000 S+", "1100 S"],
+    "Other": ["Other"]
+}
+brand_list = list(coffee_brands.keys())
+current_year = datetime.now().year
+years = list(range(1970, current_year + 1))[::-1]  # latest year first
+
+# -------------------- CUSTOMER FORM --------------------
 customer_options = customers["Company Name"].tolist()
 selected_customer = st.selectbox("Select customer", ["Add new..."] + customer_options)
 
@@ -88,7 +113,7 @@ if selected_customer == "Add new...":
                 st.stop()  # Prevent rest of form from loading
 
 else:
-    # --- MACHINE MANAGEMENT ---
+    # -------------------- MACHINE FORM --------------------
     customer_id = customers[customers["Company Name"] == selected_customer]["ID"].values[0]
     machines_for_customer = machines[machines["Customer ID"] == customer_id]
     machine_labels = [f"{row.Brand} ({row.Model})" for _, row in machines_for_customer.iterrows()]
@@ -97,39 +122,56 @@ else:
 
     if selected_machine_label == "Add new...":
         with st.form("new_machine"):
-            brand = st.text_input("Brand")
-            model = st.text_input("Model")
-            year = st.text_input("Year")
-            serial = st.text_input("Serial Number")
-            obs = st.text_area("Observations")
-            photo = st.file_uploader("Upload machine photo", type=["jpg", "jpeg", "png"])
+            brand = st.selectbox("Brand*", brand_list)
+            model_options = coffee_brands[brand] if brand in coffee_brands else ["Other"]
+            model = st.selectbox("Model*", model_options if model_options else ["Other"])
+            year = st.selectbox("Year*", [str(y) for y in years])
+            serial = st.text_input("Serial Number (optional)")
+            obs = st.text_area("Observations*")
+            photo = st.file_uploader("Upload machine photo*", type=["jpg", "jpeg", "png"])
+
+            errors = []
+            if not brand:
+                errors.append("Brand is required.")
+            if not model or (model == "Other" and brand != "Other"):
+                errors.append("Model is required.")
+            if not year:
+                errors.append("Year is required.")
+            if not obs.strip():
+                errors.append("Observations are required.")
+            if not photo:
+                errors.append("Photo is required.")
+
             submitted = st.form_submit_button("Save Machine")
-            if submitted and brand and model and serial:
-                mid = str(uuid.uuid4())
-                photo_path = ""
-                if photo:
-                    img = Image.open(photo)
-                    photo_path = f"{mid}_machine.png"
-                    img.save(photo_path)
-                new_machine_row = pd.DataFrame([{
-                    "ID": mid,
-                    "Customer ID": customer_id,
-                    "Brand": brand,
-                    "Model": model,
-                    "Year": year,
-                    "Serial Number": serial,
-                    "Photo Path": photo_path,
-                    "Observations": obs
-                }])
-                machines = pd.concat([machines, new_machine_row], ignore_index=True)
-                machines.to_csv(MACHINES_FILE, index=False)
-                st.success("Machine saved! Please reload to select.")
-                st.stop()
+            if submitted:
+                if errors:
+                    st.error("\n".join(errors))
+                else:
+                    mid = str(uuid.uuid4())
+                    photo_path = ""
+                    if photo:
+                        img = Image.open(photo)
+                        photo_path = f"{mid}_machine.png"
+                        img.save(photo_path)
+                    new_machine_row = pd.DataFrame([{
+                        "ID": mid,
+                        "Customer ID": customer_id,
+                        "Brand": brand,
+                        "Model": model,
+                        "Year": year,
+                        "Serial Number": serial,
+                        "Photo Path": photo_path,
+                        "Observations": obs
+                    }])
+                    machines = pd.concat([machines, new_machine_row], ignore_index=True)
+                    machines.to_csv(MACHINES_FILE, index=False)
+                    st.success("Machine saved! Please reload to select.")
+                    st.stop()
     elif machine_labels:
         idx = machine_labels.index(selected_machine_label)
         selected_machine_id = machine_ids[idx]
 
-        # --- JOB LOGGING FORM ---
+        # -------------------- JOB FORM --------------------
         st.subheader("Log a Job")
 
         with st.form("log_job"):
@@ -157,7 +199,6 @@ else:
             )
 
             submitted = st.form_submit_button("Submit Job")
-            # All required fields check:
             required_fields = all([
                 employee, technician, job_date, travel_time, time_in, time_out, desc
             ])
