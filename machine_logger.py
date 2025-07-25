@@ -30,7 +30,7 @@ jobs      = load_df(JOBS_FILE,      JOBS_COLUMNS)
 
 st.title("Coffee Machine Service Logger")
 
-# --- Coffee brands & models ---
+# --- Brands & Models ---
 coffee_brands = {
     "Bezzera": ["BZ10","DUO","Magica","Matrix","Mitica"],
     "Breville": ["Barista Express","Barista Pro","Duo Temp","Infuser","Oracle Touch"],
@@ -58,7 +58,6 @@ coffee_brands = {
     "WMF": ["1100 S","1500 S+","5000 S+","9000 S+","Espresso"],
     "Other": ["Other"]
 }
-# Alphabetize brands/models, Other last
 brands_no_other = sorted([b for b in coffee_brands if b!="Other"])
 brand_order     = brands_no_other + ["Other"]
 for b in coffee_brands:
@@ -67,123 +66,111 @@ for b in coffee_brands:
         ms.append("Other")
     coffee_brands[b] = ms
 
-# Year options
+# Years
 current_year = datetime.now().year
 years = list(range(1970, current_year+1))[::-1]
 
 # -------------------- CUSTOMER FORM --------------------
-cust_names = customers["Company Name"].tolist()
+cust_names = list(customers["Company Name"])
 sel_cust   = st.selectbox("Select customer", ["Add new..."] + cust_names)
 
 if sel_cust == "Add new...":
-    with st.form("new_customer_form"):
+    with st.form("new_customer"):
         cname   = st.text_input("Company Name*")
         contact = st.text_input("Contact Name*")
         addr    = st.text_input("Address* (e.g. 123 Main St, City)")
         phone   = st.text_input("Phone* (000-000-0000)")
         email   = st.text_input("Email* (you@example.com)")
 
-        errors = []
-        if not cname.strip():   errors.append("Company Name required.")
-        if not contact.strip(): errors.append("Contact Name required.")
+        errs=[]
+        if not cname.strip():   errs.append("Company Name required.")
+        if not contact.strip(): errs.append("Contact Name required.")
         if not re.match(r'.+\d+.+', addr) or len(addr.split())<3:
-            errors.append("Enter a real address.")
+            errs.append("Enter a real address.")
         if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
-            errors.append("Phone must be 000-000-0000.")
+            errs.append("Phone must be 000-000-0000.")
         if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
-            errors.append("Enter a valid email.")
+            errs.append("Enter a valid email.")
 
-        if not errors:
-            map_url = f"https://www.google.com/maps/search/{addr.replace(' ','+')}"
-            st.markdown(f"[Preview on Google Maps]({map_url})")
+        if not errs:
+            murl=f"https://www.google.com/maps/search/{addr.replace(' ','+')}"
+            st.markdown(f"[Preview on Google Maps]({murl})")
 
-        submitted = st.form_submit_button("Save Customer")
-        if submitted and not errors:
-            cid = str(uuid.uuid4())
-            row = pd.DataFrame([{
-                "ID": cid,
-                "Company Name": cname,
-                "Contact Name": contact,
-                "Address": addr,
-                "Phone": phone,
-                "Email": email
+        sub=st.form_submit_button("Save Customer")
+        if sub and not errs:
+            cid=str(uuid.uuid4())
+            new=pd.DataFrame([{
+                "ID":cid,"Company Name":cname,"Contact Name":contact,
+                "Address":addr,"Phone":phone,"Email":email
             }])
-            customers = pd.concat([customers, row], ignore_index=True)
-            customers.to_csv(CUSTOMERS_FILE, index=False)
+            customers=pd.concat([customers,new],ignore_index=True)
+            customers.to_csv(CUSTOMERS_FILE,index=False)
             st.success("Customer saved! Reload to select.")
             st.stop()
-
 else:
-    # -------------------- MACHINE FORM --------------------
-    cid = customers.loc[customers["Company Name"] == sel_cust, "ID"].iat[0]
-    cust_machines = machines[machines["Customer ID"] == cid]
+    # -------------------- MACHINE SECTION --------------------
+    cid = customers.loc[customers["Company Name"]==sel_cust,"ID"].iat[0]
+    cust_machines = machines[machines["Customer ID"]==cid]
     labels        = [f"{r.Brand} ({r.Model})" for _,r in cust_machines.iterrows()]
     ids           = cust_machines["ID"].tolist()
 
-    # Session flags
-    if "prev_machine"     not in st.session_state: st.session_state.prev_machine = None
-    if "edit_machine"     not in st.session_state: st.session_state.edit_machine = False
-    if "job_mode"         not in st.session_state: st.session_state.job_mode     = False
+    # session flags
+    if "prev_machine"   not in st.session_state: st.session_state.prev_machine   = None
+    if "edit_machine"   not in st.session_state: st.session_state.edit_machine   = False
+    if "job_mode"       not in st.session_state: st.session_state.job_mode       = False
 
-    # Choose or add
+    # choose existing or add
     if cust_machines.empty:
-        st.info("No machines for this customer—add one below.")
+        st.info("No machines—please add one below.")
         do_add = True
         selected_machine = None
     else:
-        selected_machine = st.selectbox("Select machine", ["Add new..."] + labels)
-        do_add = (selected_machine == "Add new...")
+        selected_machine = st.selectbox("Select machine", ["Add new..."]+labels)
+        do_add = (selected_machine=="Add new...")
 
-    # Reset modes when selection changes
+    # reset modes on change
     if selected_machine != st.session_state.prev_machine:
-        st.session_state.prev_machine   = selected_machine
-        st.session_state.edit_machine   = False
-        st.session_state.job_mode       = False
+        st.session_state.prev_machine = selected_machine
+        st.session_state.edit_machine = False
+        st.session_state.job_mode     = False
 
-    # --- ADD NEW MACHINE FORM ---
+    # ---- ADD NEW MACHINE ----
     if do_add:
-        with st.form("add_machine_form"):
+        with st.form("add_machine"):
             st.info("Add a new machine")
+            # Brand/model outside form omitted? they can remain inside here
             brand = st.selectbox("Brand*", [""]+brand_order, key="new_brand")
-            custom_brand = st.text_input("Enter new brand*", key="new_custom_brand") if brand=="Other" else ""
-            opts = coffee_brands.get(brand, ["Other"] if brand=="Other" else [])
+            custom_b = st.text_input("New brand*", key="new_custom_brand") if brand=="Other" else ""
+            opts = coffee_brands.get(brand,["Other"] if brand=="Other" else [])
             model = st.selectbox("Model*", [""]+opts, key="new_model")
-            custom_model = st.text_input("Enter new model*", key="new_custom_model") if model=="Other" else ""
+            custom_m = st.text_input("New model*", key="new_custom_model") if model=="Other" else ""
             year   = st.selectbox("Year*", [""]+[str(y) for y in years], key="new_year")
-            serial = st.text_input("Serial Number (optional)", key="new_serial")
-            obs    = st.text_area("Observations (optional)", key="new_obs")
-            photo  = st.file_uploader("Upload machine photo*", type=["jpg","png"], key="new_photo")
+            serial = st.text_input("Serial # (opt)", key="new_serial")
+            obs    = st.text_area("Observations (opt)", key="new_obs")
+            photo  = st.file_uploader("Photo*", type=["jpg","png"], key="new_photo")
 
-            errs = []
-            fb = custom_brand.strip() if brand=="Other" else brand
-            fm = custom_model.strip() if model=="Other" else model
-            if not fb: errs.append("Brand is required.")
-            if not fm: errs.append("Model is required.")
-            if not st.session_state.new_year: errs.append("Year is required.")
-            if not photo: errs.append("Photo is required.")
+            errs=[]
+            fb=custom_b.strip() if brand=="Other" else brand
+            fm=custom_m.strip() if model=="Other" else model
+            if not fb: errs.append("Brand required.")
+            if not fm: errs.append("Model required.")
+            if not st.session_state.new_year: errs.append("Year required.")
+            if not photo: errs.append("Photo required.")
 
-            sub2 = st.form_submit_button("Save Machine")
+            sub2=st.form_submit_button("Save Machine")
             if sub2 and not errs:
-                mid = str(uuid.uuid4())
-                path = f"{mid}_machine.png"
-                Image.open(photo).save(path)
-                row = pd.DataFrame([{
-                    "ID": mid,
-                    "Customer ID": cid,
-                    "Brand": fb,
-                    "Model": fm,
-                    "Year": st.session_state.new_year,
-                    "Serial Number": serial,
-                    "Photo Path": path,
-                    "Observations": obs
+                mid=str(uuid.uuid4()); pth=f"{mid}_machine.png"; Image.open(photo).save(pth)
+                newm=pd.DataFrame([{
+                    "ID":mid,"Customer ID":cid,
+                    "Brand":fb,"Model":fm,"Year":st.session_state.new_year,
+                    "Serial Number":serial,"Photo Path":pth,"Observations":obs
                 }])
-                machines = pd.concat([machines, row], ignore_index=True)
-                machines.to_csv(MACHINES_FILE, index=False)
-                st.success("Machine saved! Reload to select.")
-                st.stop()
+                machines=pd.concat([machines,newm],ignore_index=True)
+                machines.to_csv(MACHINES_FILE,index=False)
+                st.success("Machine saved! Reload to select."); st.stop()
 
     else:
-        # --- VIEW DETAILS & Continue/Edit ---
+        # ---- VIEW DETAILS FIRST ----
         idx  = labels.index(selected_machine)
         mrow = cust_machines.iloc[idx]
 
@@ -191,108 +178,101 @@ else:
             st.text_input("Brand", value=mrow.get("Brand",""), disabled=True)
             st.text_input("Model", value=mrow.get("Model",""), disabled=True)
             st.text_input("Year", value=mrow.get("Year",""), disabled=True)
-            st.text_input("Serial Number", value=mrow.get("Serial Number",""), disabled=True)
+            st.text_input("Serial #", value=mrow.get("Serial Number",""), disabled=True)
             st.text_area("Observations", value=mrow.get("Observations",""), disabled=True)
-            pp = mrow.get("Photo Path","")
-            if isinstance(pp,str) and os.path.exists(pp):
-                st.image(pp, caption="Machine Photo", width=200)
-            c1,c2 = st.columns(2)
+            pp=mrow.get("Photo Path","")
+            if isinstance(pp,str) and os.path.exists(pp): st.image(pp,caption="Machine Photo",width=200)
+            c1,c2=st.columns(2)
             if c1.button("Continue to Job"): st.session_state.job_mode = True
             if c2.button("Edit Machine"):   st.session_state.edit_machine = True
 
-        # --- EDIT MACHINE FORM (active inputs) ---
+        # ---- EDIT MACHINE (brand/model OUTSIDE form) ----
         if st.session_state.edit_machine:
-            with st.form("edit_machine_form"):
-                st.info("Edit machine details")
-                brand = st.selectbox(
-                    "Brand*", [""]+brand_order,
-                    index=(brand_order.index(mrow["Brand"])+1)
-                          if mrow["Brand"] in brand_order else 0,
-                    key="edit_brand"
-                )
-                cb = st.text_input("Enter new brand*", key="edit_custom_brand") if brand=="Other" else ""
-                opts = coffee_brands.get(brand, ["Other"] if brand=="Other" else [])
-                model = st.selectbox(
-                    "Model*", [""]+opts,
-                    index=(opts.index(mrow["Model"])+1) if mrow["Model"] in opts else 0,
-                    key="edit_model"
-                )
-                cm = st.text_input("Enter new model*", key="edit_custom_model") if model=="Other" else ""
+            # Brand selector OUTSIDE
+            brand = st.selectbox(
+                "Brand*",
+                [""]+brand_order,
+                index=(brand_order.index(mrow["Brand"])+1) if mrow["Brand"] in brand_order else 0,
+                key="edit_brand_sel"
+            )
+            custom_b = st.text_input("New brand*", key="edit_custom_brand") if brand=="Other" else ""
+            opts = coffee_brands.get(brand,["Other"] if brand=="Other" else [])
+            model = st.selectbox(
+                "Model*",
+                [""]+opts,
+                index=(opts.index(mrow["Model"])+1) if mrow["Model"] in opts else 0,
+                key="edit_model_sel"
+            )
+            custom_m = st.text_input("New model*", key="edit_custom_model") if model=="Other" else ""
+
+            # now the rest inside form
+            with st.form("edit_machine"):
                 year = st.selectbox(
-                    "Year*", [""]+[str(y) for y in years],
-                    index=(years.index(int(mrow["Year"]))+1)
-                          if str(mrow["Year"]) in [str(y) for y in years] else 0,
+                    "Year*",
+                    [""]+[str(y) for y in years],
+                    index=(years.index(int(mrow["Year"]))+1) if str(mrow["Year"]) in [str(y) for y in years] else 0,
                     key="edit_year"
                 )
                 serial = st.text_input(
-                    "Serial Number (optional)",
+                    "Serial # (opt)",
                     value=mrow.get("Serial Number",""),
                     key="edit_serial"
                 )
                 obs = st.text_area(
-                    "Observations (optional)",
+                    "Observations (opt)",
                     value=mrow.get("Observations",""),
                     key="edit_obs"
                 )
-                photo = st.file_uploader(
-                    "Upload new machine photo (leave empty to keep)",
-                    type=["jpg","png"], key="edit_photo"
-                )
+                photo = st.file_uploader("New photo (opt)",type=["jpg","png"],key="edit_photo")
 
-                errs = []
-                fb = cb.strip() if brand=="Other" else brand
-                fm = cm.strip() if model=="Other" else model
-                if not fb: errs.append("Brand is required.")
-                if not fm: errs.append("Model is required.")
-                if not st.session_state.edit_year: errs.append("Year is required.")
+                errs=[]
+                fb=custom_b.strip() if brand=="Other" else brand
+                fm=custom_m.strip() if model=="Other" else model
+                if not fb: errs.append("Brand required.")
+                if not fm: errs.append("Model required.")
+                if not st.session_state.edit_year: errs.append("Year required.")
 
-                sub3 = st.form_submit_button("Save Changes")
-                if sub3 and not errs:
+                submit = st.form_submit_button("Save Changes")
+                if submit and not errs:
                     machines.loc[machines["ID"]==mrow["ID"],
-                                 ["Brand","Model","Year","Serial Number","Observations"]] = [
-                        fb, fm,
-                        st.session_state.edit_year,
-                        serial, obs
-                    ]
+                        ["Brand","Model","Year","Serial Number","Observations"]
+                    ] = [fb,fm,st.session_state.edit_year,serial,obs]
                     if photo:
-                        path = f"{mrow['ID']}_machine.png"
+                        path=f"{mrow['ID']}_machine.png"
                         Image.open(photo).save(path)
-                        machines.loc[machines["ID"]==mrow["ID"], "Photo Path"] = path
-                    machines.to_csv(MACHINES_FILE, index=False)
+                        machines.loc[machines["ID"]==mrow["ID"],"Photo Path"]=path
+                    machines.to_csv(MACHINES_FILE,index=False)
                     st.success("Machine updated!")
-                    st.session_state.edit_machine = False
+                    st.session_state.edit_machine=False
                     st.experimental_rerun()
 
-        # --- JOB FORM ---
+        # ---- JOB FORM ----
         if st.session_state.job_mode and not st.session_state.edit_machine:
             st.subheader("Log a Job")
-            with st.form("log_job_form"):
+            with st.form("job_form"):
                 employee   = st.text_input("Employee Name")
-                technician = st.selectbox("Technician", ["Adonai Garcia","Miki Horvath"])
-                job_date   = st.date_input("Date", datetime.now())
-                travel     = st.number_input("Travel Time (min)", 0, step=1)
+                technician = st.selectbox("Technician",["Adonai Garcia","Miki Horvath"])
+                job_date   = st.date_input("Date",datetime.now())
+                travel     = st.number_input("Travel Time (min)",0,step=1)
                 t_in       = st.time_input("Time In")
                 t_out      = st.time_input("Time Out")
                 desc       = st.text_area("Job Description")
-                parts      = st.text_area("Parts Used (optional)")
-                comments   = st.text_area("Additional Comments (optional)")
-                found      = st.file_uploader("Machine as Found", type=["jpg","png","mp4"])
-                left       = st.file_uploader("Machine as Left", type=["jpg","png","mp4"])
-                st.write("Draw signature:")
+                parts      = st.text_area("Parts Used (opt)")
+                comments   = st.text_area("Additional Comments (opt)")
+                found      = st.file_uploader("Machine as Found",type=["jpg","png","mp4"])
+                left       = st.file_uploader("Machine as Left",type=["jpg","png","mp4"])
                 sigimg     = st_canvas(
-                                fill_color="rgba(255,255,255,1)",
-                                stroke_width=2, stroke_color="#000",
-                                background_color="#fff", height=100, width=300,
-                                drawing_mode="freedraw", key="sig"
-                            )
-
+                    fill_color="rgba(255,255,255,1)",stroke_width=2,
+                    stroke_color="#000",background_color="#fff",
+                    height=100,width=300,drawing_mode="freedraw",key="sig"
+                )
                 submit_job = st.form_submit_button("Submit Job")
                 if submit_job:
-                    jid = str(uuid.uuid4())
-                    sigpth = ""
+                    jid=str(uuid.uuid4())
+                    sigpth=""
                     if sigimg.image_data is not None:
-                        im = Image.fromarray(sigimg.image_data)
-                        sigpth = f"{jid}_signature.png"; im.save(sigpth)
+                        im=Image.fromarray(sigimg.image_data)
+                        sigpth=f"{jid}_signature.png"; im.save(sigpth)
                     fpth=""
                     if found:
                         ext=found.name.split(".")[-1]; fpth=f"{jid}_found.{ext}"
@@ -301,20 +281,20 @@ else:
                     if left:
                         ext=left.name.split(".")[-1]; lpth=f"{jid}_left.{ext}"
                         open(lpth,"wb").write(left.read())
-                    newj = pd.DataFrame([{
-                        "Job ID": jid, "Customer ID": cid, "Machine ID": mrow["ID"],
-                        "Employee Name": employee, "Technician": technician,
-                        "Date": str(job_date), "Travel Time (min)": int(travel),
-                        "Time In": str(t_in), "Time Out": str(t_out),
-                        "Job Description": desc, "Parts Used": parts,
-                        "Additional Comments": comments,
-                        "Machine as Found Path": fpth,
-                        "Machine as Left Path": lpth,
-                        "Signature Path": sigpth
+                    newj=pd.DataFrame([{
+                        "Job ID":jid,"Customer ID":cid,"Machine ID":mrow["ID"],
+                        "Employee Name":employee,"Technician":technician,
+                        "Date":str(job_date),"Travel Time (min)":int(travel),
+                        "Time In":str(t_in),"Time Out":str(t_out),
+                        "Job Description":desc,"Parts Used":parts,
+                        "Additional Comments":comments,
+                        "Machine as Found Path":fpth,
+                        "Machine as Left Path":lpth,
+                        "Signature Path":sigpth
                     }])
-                    jobs = pd.concat([jobs, newj], ignore_index=True)
-                    jobs.to_csv(JOBS_FILE, index=False)
-                    st.success("Job logged successfully!")
+                    jobs=pd.concat([jobs,newj],ignore_index=True)
+                    jobs.to_csv(JOBS_FILE,index=False)
+                    st.success("Job logged!")
                     st.markdown("### Preview")
                     st.write(f"Customer: {sel_cust}")
                     st.write(f"Machine: {selected_machine}")
@@ -326,19 +306,16 @@ else:
                     st.write(f"Job Description: {desc}")
                     if parts:    st.write(f"Parts Used: {parts}")
                     if comments: st.write(f"Additional Comments: {comments}")
-                    if sigpth:   st.image(sigpth, caption="Signature", width=150)
+                    if sigpth:   st.image(sigpth,caption="Signature",width=150)
                     if fpth and os.path.exists(fpth):
                         if fpth.endswith(".mp4"): st.video(fpth)
-                        else: st.image(fpth, caption="Machine as Found", width=150)
+                        else: st.image(fpth,caption="Machine as Found",width=150)
                     if lpth and os.path.exists(lpth):
                         if lpth.endswith(".mp4"): st.video(lpth)
-                        else: st.image(lpth, caption="Machine as Left", width=150)
+                        else: st.image(lpth,caption="Machine as Left",width=150)
 
 # --- Admin Tabs ---
-tab1, tab2, tab3 = st.tabs(["All Jobs","All Customers","All Machines"])
-with tab1:
-    st.header("All Job Logs");   st.dataframe(jobs)
-with tab2:
-    st.header("All Customers");  st.dataframe(customers)
-with tab3:
-    st.header("All Machines");   st.dataframe(machines)
+tab1,tab2,tab3=st.tabs(["All Jobs","All Customers","All Machines"])
+with tab1: st.header("All Job Logs");   st.dataframe(jobs)
+with tab2: st.header("All Customers");  st.dataframe(customers)
+with tab3: st.header("All Machines");   st.dataframe(machines)
