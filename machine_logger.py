@@ -2,12 +2,15 @@ import re
 import os
 import uuid
 import smtplib
+import mimetypes
 import streamlit as st
 import pandas as pd
 from PIL import Image
 from datetime import datetime
+from email import encoders
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
 from streamlit_drawable_canvas import st_canvas
 
 # --- File names & schema ---
@@ -33,8 +36,8 @@ jobs      = load_df(JOBS_FILE,      JOBS_COLUMNS)
 
 st.title("Coffee Machine Service Logger")
 
-# --- Email helper ---
-def send_job_email(job_id, cust_email, html_body):
+# --- Email helper with attachments ---
+def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
     sender      = st.secrets["email"]["user"]
     password    = st.secrets["email"]["password"]
     smtp_server = st.secrets["email"]["smtp_server"]
@@ -43,22 +46,46 @@ def send_job_email(job_id, cust_email, html_body):
     if cust_email:
         recipients.append(cust_email)
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"New Job Logged: {job_id}"
+    msg = MIMEMultipart()
+    msg["Subject"] = f"Service Job Confirmation - {job_id}"
     msg["From"]    = sender
     msg["To"]      = ", ".join(recipients)
 
+    # Plain‑text fallback
     text = re.sub(r"<br\s*/?>", "\n", re.sub(r"<.*?>", "", html_body))
     part1 = MIMEText(text, "plain")
     part2 = MIMEText(html_body, "html")
     msg.attach(part1)
     msg.attach(part2)
 
+    # Attach signature
+    if sig_path and os.path.exists(sig_path):
+        ctype, encoding = mimetypes.guess_type(sig_path)
+        maintype, subtype = ctype.split("/",1)
+        with open(sig_path, "rb") as f:
+            part = MIMEBase(maintype, subtype)
+            part.set_payload(f.read())
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", f'attachment; filename="signature.png"')
+        msg.attach(part)
+
+    # Attach 'machine as left' media
+    if left_path and os.path.exists(left_path):
+        ctype, encoding = mimetypes.guess_type(left_path)
+        maintype, subtype = ctype.split("/",1)
+        with open(left_path, "rb") as f:
+            part = MIMEBase(maintype, subtype)
+            part.set_payload(f.read())
+        encoders.encode_base64(part)
+        filename = os.path.basename(left_path)
+        part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
+        msg.attach(part)
+
     with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
         server.login(sender, password)
         server.sendmail(sender, recipients, msg.as_string())
 
-# --- Brands & Models ---
+# --- Brands & Models data ---
 coffee_brands = {
     "Bezzera": ["BZ10","DUO","Magica","Matrix","Mitica"],
     "Breville": ["Barista Express","Barista Pro","Duo Temp","Infuser","Oracle Touch"],
@@ -110,10 +137,10 @@ if sel_cust == "Add new...":
         email   = st.text_input("Email* (you@example.com)")
 
         errs = []
-        if not cname.strip(): errs.append("Company Name required.")
+        if not cname.strip():   errs.append("Company Name required.")
         if not contact.strip(): errs.append("Contact Name required.")
         if not re.match(r'.+\d+.+', addr) or len(addr.split())<3:
-            errs.append("Enter a real address.")
+            errs.append("Enter a valid address.")
         if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
             errs.append("Phone must be 000-000-0000.")
         if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
@@ -140,7 +167,7 @@ if sel_cust == "Add new...":
             st.stop()
 
 else:
-    # --- VIEW SELECTED CUSTOMER INFO ---
+    # --- VIEW CUSTOMER INFO ---
     cust_row = customers[customers["Company Name"]==sel_cust].iloc[0]
     st.subheader("Customer Information")
     st.text_input("Company Name", value=cust_row.get("Company Name",""), disabled=True)
@@ -151,16 +178,15 @@ else:
 
     # -------------------- MACHINE FORM --------------------
     customer_id    = cust_row["ID"]
-    existing       = machines[machines["Customer ID"] == customer_id]
-    machine_labels = [f"{r.Brand} ({r.Model})" for _, r in existing.iterrows()]
+    existing       = machines[machines["Customer ID"]==customer_id]
+    labels         = [f"{r.Brand} ({r.Model})" for _,r in existing.iterrows()]
     machine_ids    = existing["ID"].tolist()
+    sel_machine    = st.selectbox("Select machine", ["Add new..."] + labels)
 
-    selected_label = st.selectbox("Select machine", ["Add new..."] + machine_labels)
-
-    if selected_label == "Add new...":
+    if sel_machine == "Add new...":
         # Brand & Model selectors outside form
         for k in ("brand_sel","prev_brand","model_sel","custom_brand","custom_model"):
-            if k not in st.session_state: st.session_state[k] = ""
+            st.session_state.setdefault(k, "")
 
         brand = st.selectbox("Brand*", [""]+brand_order, key="brand_sel")
         if brand != st.session_state.prev_brand:
@@ -169,15 +195,10 @@ else:
             st.session_state.custom_model = ""
             st.session_state.custom_brand = ""
 
-        custom_brand = ""
-        if brand=="Other":
-            custom_brand = st.text_input("Enter new brand*", key="custom_brand")
-
-        model_opts = coffee_brands.get(brand, ["Other"] if brand=="Other" else [])
-        model = st.selectbox("Model*", [""]+model_opts, key="model_sel")
-        custom_model = ""
-        if model=="Other":
-            custom_model = st.text_input("Enter new model*", key="custom_model")
+        custom_brand = st.text_input("Enter new brand*", key="custom_brand") if brand=="Other" else ""
+        opts = coffee_brands.get(brand, ["Other"] if brand=="Other" else [])
+        model = st.selectbox("Model*", [""]+opts, key="model_sel")
+        custom_model = st.text_input("Enter new model*", key="custom_model") if model=="Other" else ""
 
         with st.form("new_machine"):
             year   = st.selectbox("Year*", [""]+[str(y) for y in years], key="year")
@@ -194,148 +215,149 @@ else:
             if not photo: errs.append("Photo is required.")
 
             sub2 = st.form_submit_button("Save Machine")
-            if sub2:
-                if errs:
-                    st.error("\n".join(errs))
-                else:
-                    mid = str(uuid.uuid4()); path=f"{mid}_machine.png"
-                    Image.open(photo).save(path)
-                    new = pd.DataFrame([{
-                        "ID": mid,
-                        "Customer ID": customer_id,
-                        "Brand": fb,
-                        "Model": fm,
-                        "Year": st.session_state.year,
-                        "Serial Number": serial,
-                        "Photo Path": path,
-                        "Observations": obs
-                    }])
-                    machines = pd.concat([machines, new], ignore_index=True)
-                    machines.to_csv(MACHINES_FILE, index=False)
-                    st.success("Machine saved! Reload to select.")
-                    st.stop()
+            if sub2 and not errs:
+                mid = str(uuid.uuid4()); path=f"{mid}_machine.png"; Image.open(photo).save(path)
+                new = pd.DataFrame([{
+                    "ID": mid, "Customer ID": customer_id,
+                    "Brand": fb, "Model": fm, "Year": st.session_state.year,
+                    "Serial Number": serial,
+                    "Photo Path": path, "Observations": obs
+                }])
+                machines = pd.concat([machines, new], ignore_index=True)
+                machines.to_csv(MACHINES_FILE, index=False)
+                st.success("Machine saved! Reload to select."); st.stop()
 
     else:
         # --- VIEW MACHINE INFO ---
-        idx  = machine_labels.index(selected_label)
+        idx  = labels.index(sel_machine)
         mrow = existing.iloc[idx]
-
         st.subheader("Machine Information")
         st.text_input("Brand",         value=mrow.get("Brand",""),         disabled=True)
         st.text_input("Model",         value=mrow.get("Model",""),         disabled=True)
         st.text_input("Year",          value=mrow.get("Year",""),          disabled=True)
         st.text_input("Serial Number", value=mrow.get("Serial Number",""), disabled=True)
-        st.text_area("Observations",    value=mrow.get("Observations",""),  disabled=True)
+        st.text_area("Observations",   value=mrow.get("Observations",""),   disabled=True)
+        pp = mrow.get("Photo Path","")
+        if pp and os.path.exists(pp):
+            st.image(pp, caption="Machine Photo", width=200)
 
-        photo_path = mrow.get("Photo Path","")
-        if isinstance(photo_path,str) and os.path.exists(photo_path):
-            st.image(photo_path, caption="Machine Photo", width=200)
-
-        # -------------------- JOB LOGGING FORM --------------------
+        # -------------------- JOB FORM --------------------
         st.subheader("Log a Job")
         with st.form("log_job"):
-            employee   = st.text_input("Employee Name")
-            technician = st.selectbox("Technician", ["Adonai Garcia","Miki Horvath"])
-            job_date   = st.date_input("Date", datetime.now())
-            travel     = st.number_input("Travel Time (min)", 0, step=1)
-            time_in    = st.time_input("Time In")
-            time_out   = st.time_input("Time Out")
-            desc       = st.text_area("Job Description")
+            # Required fields except parts & comments
+            technician = st.selectbox("Technician*", ["Adonai Garcia","Miki Horvath"])
+            job_date   = st.date_input("Date*", datetime.now())
+            travel     = st.number_input("Travel Time (min)*", 0, step=1)
+            time_in    = st.time_input("Time In*")
+            time_out   = st.time_input("Time Out*")
+            desc       = st.text_area("Job Description*")
             parts      = st.text_area("Parts Used (optional)")
             comments   = st.text_area("Additional Comments (optional)")
-            found      = st.file_uploader("Machine as Found", type=["jpg","png","mp4"])
-            left       = st.file_uploader("Machine as Left",  type=["jpg","png","mp4"])
+            found      = st.file_uploader("Machine as Found* (jpg/png/mp4)")
+            left       = st.file_uploader("Machine as Left* (jpg/png/mp4)")
+            # Move employee just before signature
+            employee   = st.text_input("Employee Full Name*")
             sigimg     = st_canvas(
-                            fill_color="rgba(255,255,255,1)",
-                            stroke_width=2, stroke_color="#000",
-                            background_color="#fff", height=100, width=300,
-                            drawing_mode="freedraw", key="signature"
-                         )
+                fill_color="rgba(255,255,255,1)", stroke_width=2,
+                stroke_color="#000", background_color="#fff",
+                height=100, width=300, drawing_mode="freedraw", key="sig"
+            )
+            # Acknowledgment text
+            st.markdown(
+                "**By submitting this form, I acknowledge that I have reviewed " +
+                "and verify the accuracy of all information provided above.**"
+            )
 
-            submitted = st.form_submit_button("Submit Job")
-            if submitted and all([employee, technician, job_date, travel, time_in, time_out, desc]):
-                job_id = str(uuid.uuid4())
-                sig_path = ""
-                if sigimg.image_data is not None:
-                    im = Image.fromarray(sigimg.image_data)
-                    sig_path = f"{job_id}_signature.png"; im.save(sig_path)
-
-                fpath = ""
-                if found:
-                    ext = found.name.rsplit(".",1)[-1]
-                    fpath = f"{job_id}_found.{ext}"
+            submit_job = st.form_submit_button("Submit Job")
+            req = all([
+                technician, job_date is not None,
+                travel is not None, time_in is not None,
+                time_out is not None, desc.strip(),
+                found, left, employee.strip(),
+                sigimg.image_data is not None
+            ])
+            if submit_job:
+                if not req:
+                    st.error("Please complete all required fields.")
+                else:
+                    job_id = str(uuid.uuid4())
+                    # Save signature
+                    sig_path = f"{job_id}_signature.png"
+                    Image.fromarray(sigimg.image_data).save(sig_path)
+                    # Save found/left media
+                    fpath = f"{job_id}_found.{found.name.rsplit('.',1)[-1]}"
                     open(fpath,"wb").write(found.read())
-
-                lpath = ""
-                if left:
-                    ext = left.name.rsplit(".",1)[-1]
-                    lpath = f"{job_id}_left.{ext}"
+                    lpath = f"{job_id}_left.{left.name.rsplit('.',1)[-1]}"
                     open(lpath,"wb").write(left.read())
+                    # Write to CSV
+                    newj = pd.DataFrame([{
+                        "Job ID": job_id,
+                        "Customer ID": customer_id,
+                        "Machine ID": machine_ids[idx],
+                        "Employee Name": employee,
+                        "Technician": technician,
+                        "Date": str(job_date),
+                        "Travel Time (min)": int(travel),
+                        "Time In": str(time_in),
+                        "Time Out": str(time_out),
+                        "Job Description": desc,
+                        "Parts Used": parts,
+                        "Additional Comments": comments,
+                        "Machine as Found Path": fpath,
+                        "Machine as Left Path": lpath,
+                        "Signature Path": sig_path
+                    }])
+                    jobs = pd.concat([jobs, newj], ignore_index=True)
+                    jobs.to_csv(JOBS_FILE, index=False)
+                    st.success("Job logged successfully!")
 
-                new_job = pd.DataFrame([{
-                    "Job ID": job_id,
-                    "Customer ID": customer_id,
-                    "Machine ID": machine_ids[idx],
-                    "Employee Name": employee,
-                    "Technician": technician,
-                    "Date": str(job_date),
-                    "Travel Time (min)": int(travel),
-                    "Time In": str(time_in),
-                    "Time Out": str(time_out),
-                    "Job Description": desc,
-                    "Parts Used": parts,
-                    "Additional Comments": comments,
-                    "Machine as Found Path": fpath,
-                    "Machine as Left Path": lpath,
-                    "Signature Path": sig_path
-                }])
-                jobs = pd.concat([jobs, new_job], ignore_index=True)
-                jobs.to_csv(JOBS_FILE, index=False)
-                st.success("Job logged successfully!")
+                    # Build professional email HTML
+                    html = (
+                        "<p>Dear Customer,</p>"
+                        "<p>Thank you for choosing Machine Hunter for your service needs. " +
+                        "Below are the details of your recent service job:</p>"
+                        f"<p><strong>Job ID:</strong> {job_id}</p>"
+                        f"<p><strong>Customer:</strong> {sel_cust}</p>"
+                        f"<p><strong>Machine:</strong> {sel_machine}</p>"
+                        f"<p><strong>Employee:</strong> {employee}</p>"
+                        f"<p><strong>Technician:</strong> {technician}</p>"
+                        f"<p><strong>Date:</strong> {job_date}</p>"
+                        f"<p><strong>Travel Time:</strong> {travel} min</p>"
+                        f"<p><strong>Time In:</strong> {time_in}</p>"
+                        f"<p><strong>Time Out:</strong> {time_out}</p>"
+                        f"<p><strong>Description:</strong> {desc}</p>"
+                        + (f"<p><strong>Parts Used:</strong> {parts}</p>" if parts else "")
+                        + (f"<p><strong>Additional Comments:</strong> {comments}</p>" if comments else "")
+                        "<p>Please find attached the technician’s signature and " +
+                        "a snapshot of the machine as it was left.</p>"
+                        "<p>We appreciate your business and look forward to serving you again.</p>"
+                        "<p>Sincerely,<br/>Machine Hunter Service Team</p>"
+                    )
+                    cust_email = cust_row.get("Email","")
+                    send_job_email(job_id, cust_email, html, sig_path, lpath)
 
-                # send email
-                cust_email = cust_row.get("Email","")
-                html = (
-                    f"<p><strong>Customer:</strong> {sel_cust}</p>"
-                    f"<p><strong>Machine:</strong> {selected_label}</p>"
-                    f"<p><strong>Employee:</strong> {employee}</p>"
-                    f"<p><strong>Technician:</strong> {technician}</p>"
-                    f"<p><strong>Date:</strong> {job_date}</p>"
-                    f"<p><strong>Travel Time:</strong> {travel} min</p>"
-                    f"<p><strong>Time In:</strong> {time_in}</p>"
-                    f"<p><strong>Time Out:</strong> {time_out}</p>"
-                    f"<p><strong>Description:</strong> {desc}</p>"
-                    + (f"<p><strong>Parts Used:</strong> {parts}</p>" if parts else "")
-                    + (f"<p><strong>Additional Comments:</strong> {comments}</p>" if comments else "")
-                )
-                send_job_email(job_id, cust_email, html)
-
-                # preview
-                st.markdown("### Preview")
-                st.write(f"Customer: {sel_cust}")
-                st.write(f"Machine: {selected_label}")
-                st.write(f"Employee: {employee}")
-                st.write(f"Technician: {technician}")
-                st.write(f"Date: {job_date}")
-                st.write(f"Travel Time: {travel} min")
-                st.write(f"Time In: {time_in}")
-                st.write(f"Time Out: {time_out}")
-                st.write(f"Job Description: {desc}")
-                if parts:    st.write(f"Parts Used: {parts}")
-                if comments: st.write(f"Additional Comments: {comments}")
-                if sig_path: st.image(sig_path, caption="Signature", width=150)
-                if fpath and os.path.exists(fpath):
-                    if fpath.endswith(".mp4"): st.video(fpath)
-                    else:                      st.image(fpath, caption="Found", width=150)
-                if lpath and os.path.exists(lpath):
-                    if lpath.endswith(".mp4"): st.video(lpath)
-                    else:                      st.image(lpath, caption="Left", width=150)
+                    # On‑screen preview
+                    st.markdown("### Preview")
+                    st.write(f"Customer: {sel_cust}")
+                    st.write(f"Machine: {sel_machine}")
+                    st.write(f"Employee: {employee}")
+                    st.write(f"Technician: {technician}")
+                    st.write(f"Date: {job_date}")
+                    st.write(f"Travel Time: {travel} min")
+                    st.write(f"Time In: {time_in}  Time Out: {time_out}")
+                    st.write(f"Job Description: {desc}")
+                    if parts:    st.write(f"Parts Used: {parts}")
+                    if comments: st.write(f"Additional Comments: {comments}")
+                    st.image(sig_path, caption="Signature", width=150)
+                    if os.path.exists(fpath):
+                        if fpath.endswith(".mp4"): st.video(fpath)
+                        else:                      st.image(fpath, caption="As Found", width=150)
+                    if os.path.exists(lpath):
+                        if lpath.endswith(".mp4"): st.video(lpath)
+                        else:                      st.image(lpath, caption="As Left", width=150)
 
 # --- Admin Tabs ---
 tab1,tab2,tab3 = st.tabs(["All Jobs","All Customers","All Machines"])
-with tab1:
-    st.header("All Job Logs");      st.dataframe(jobs)
-with tab2:
-    st.header("All Customers");     st.dataframe(customers)
-with tab3:
-    st.header("All Machines");      st.dataframe(machines)
+with tab1: st.header("All Job Logs");   st.dataframe(jobs)
+with tab2: st.header("All Customers");  st.dataframe(customers)
+with tab3: st.header("All Machines");   st.dataframe(machines)
