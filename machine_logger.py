@@ -119,45 +119,66 @@ if sel_cust == "Add new...":
 
 else:
     # -------------------- MACHINE FORM --------------------
-    cid   = customers.loc[customers["Company Name"] == sel_cust, "ID"].iat[0]
+    cid = customers.loc[customers["Company Name"] == sel_cust, "ID"].iat[0]
     exist = machines[machines["Customer ID"] == cid]
-    labels= [f"{r.Brand} ({r.Model})" for _, r in exist.iterrows()]
-    ids   = exist["ID"].tolist()
+    labels = [f"{r.Brand} ({r.Model})" for _, r in exist.iterrows()]
+    ids    = exist["ID"].tolist()
 
-    # Choose existing or add new
+    # Init session state for selects
+    for key in ("selected_brand", "prev_brand", "selected_model", "custom_brand", "custom_model"):
+        if key not in st.session_state:
+            st.session_state[key] = ""
+
+    # Brand selector
+    brand = st.selectbox(
+        "Brand*",
+        [""] + brand_order,
+        index=brand_order.index(st.session_state.selected_brand) + 1
+              if st.session_state.selected_brand in brand_order else 0,
+        key="selected_brand"
+    )
+    if brand != st.session_state.prev_brand:
+        st.session_state.prev_brand     = brand
+        st.session_state.selected_model = ""
+        st.session_state.custom_model   = ""
+        st.session_state.custom_brand   = ""
+
+    custom_brand = ""
+    if brand == "Other":
+        custom_brand = st.text_input("Enter new brand*", key="custom_brand")
+
+    # Model selector
+    if brand in coffee_brands:
+        opts = coffee_brands[brand]
+    elif brand == "Other":
+        opts = ["Other"]
+    else:
+        opts = []
+    model = st.selectbox(
+        "Model*",
+        [""] + opts,
+        index=opts.index(st.session_state.selected_model) + 1
+              if st.session_state.selected_model in opts else 0,
+        key="selected_model"
+    )
+    custom_model = ""
+    if model == "Other":
+        custom_model = st.text_input("Enter new model*", key="custom_model")
+
+    # Select existing machine or Add new...
     if labels:
         sel_mach = st.selectbox("Select machine", ["Add new..."] + labels, key="machine_select")
     else:
         sel_mach = "Add new..."
         st.info("No machines for this customer—please add one below.")
 
+    # Add new machine form
     if sel_mach == "Add new...":
         with st.form("new_machine"):
-            st.info("No machines for this customer—please add one below.")
-
-            # Brand & custom
-            brand = st.selectbox("Brand*", [""] + brand_order, key="brand_select")
-            custom_brand = ""
-            if brand == "Other":
-                custom_brand = st.text_input("Enter new brand*", key="custom_brand")
-
-            # Model & custom
-            if brand in coffee_brands:
-                opts = coffee_brands[brand]
-            elif brand == "Other":
-                opts = ["Other"]
-            else:
-                opts = []
-            model = st.selectbox("Model*", [""] + opts, key="model_select")
-            custom_model = ""
-            if model == "Other":
-                custom_model = st.text_input("Enter new model*", key="custom_model")
-
-            # Other fields
             year   = st.selectbox("Year*", [""] + [str(y) for y in years], key="year")
-            serial = st.text_input("Serial Number (optional)", key="serial")
-            obs    = st.text_area("Observations (optional)", key="obs")
-            photo  = st.file_uploader("Upload machine photo*", type=["jpg","png"], key="photo")
+            serial= st.text_input("Serial Number (optional)", key="serial")
+            obs   = st.text_area("Observations (optional)", key="obs")
+            photo = st.file_uploader("Upload machine photo*", type=["jpg","png"], key="photo")
 
             errs = []
             final_brand = custom_brand.strip() if brand == "Other" else brand
@@ -214,15 +235,15 @@ else:
             left       = st.file_uploader("Machine as Left", type=["jpg","png","mp4"])
             st.write("Draw signature:")
             sigimg     = st_canvas(
-                fill_color="rgba(255,255,255,1)", stroke_width=2,
-                stroke_color="#000", background_color="#fff",
-                height=100, width=300, drawing_mode="freedraw", key="sig"
-            )
+                            fill_color="rgba(255,255,255,1)", stroke_width=2,
+                            stroke_color="#000", background_color="#fff",
+                            height=100, width=300, drawing_mode="freedraw", key="sig"
+                        )
 
             sub3 = st.form_submit_button("Submit Job")
             req = all([employee, technician, job_date, travel, t_in, t_out, desc])
             if sub3 and req:
-                jid    = str(uuid.uuid4())
+                jid = str(uuid.uuid4())
                 sigpth = ""
                 if sigimg.image_data is not None:
                     im = Image.fromarray(sigimg.image_data)
