@@ -213,7 +213,6 @@ sel_name = st.session_state.selected_customer
 # Guard against missing selection
 if not sel_name or sel_name not in customers["Company Name"].tolist():
     st.session_state.mode = "select"
-    st.warning("Customer not found—please click a map marker to select or add new.")
     st.stop()
 
 cust = customers.loc[customers["Company Name"] == sel_name].iloc[0]
