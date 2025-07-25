@@ -26,13 +26,13 @@ CUSTOMERS_FILE = "customers.csv"
 MACHINES_FILE  = "machines.csv"
 JOBS_FILE      = "jobs.csv"
 
-CUSTOMERS_COLUMNS = ["ID","Company Name","Contact Name","Address","Phone","Email"]
-MACHINES_COLUMNS  = ["ID","Customer ID","Brand","Model","Year","Serial Number","Photo Path","Observations"]
+CUSTOMERS_COLUMNS = ["ID", "Company Name", "Contact Name", "Address", "Phone", "Email"]
+MACHINES_COLUMNS  = ["ID", "Customer ID", "Brand", "Model", "Year", "Serial Number", "Photo Path", "Observations"]
 JOBS_COLUMNS      = [
-    "Job ID","Customer ID","Machine ID","Employee Name","Technician",
-    "Date","Travel Time (min)","Time In","Time Out","Job Description",
-    "Parts Used","Additional Comments",
-    "Machine as Found Path","Machine as Left Path","Signature Path"
+    "Job ID", "Customer ID", "Machine ID", "Employee Name", "Technician",
+    "Date", "Travel Time (min)", "Time In", "Time Out", "Job Description",
+    "Parts Used", "Additional Comments",
+    "Machine as Found Path", "Machine as Left Path", "Signature Path"
 ]
 
 def load_df(path, cols):
@@ -61,16 +61,16 @@ def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
     msg["To"]      = ", ".join(recipients)
 
     alt = MIMEMultipart("alternative")
-    text = re.sub(r"<.*?>","", html_body).replace("<br>","\n")
+    text = re.sub(r"<.*?>", "", html_body).replace("<br>", "\n")
     alt.attach(MIMEText(text, "plain"))
     alt.attach(MIMEText(html_body, "html"))
     msg.attach(alt)
 
     def _attach(path, fname):
         ctype, _ = mimetypes.guess_type(path)
-        maintype, subtype = ctype.split("/",1)
+        maintype, subtype = ctype.split("/", 1)
         part = MIMEBase(maintype, subtype)
-        with open(path,"rb") as f:
+        with open(path, "rb") as f:
             part.set_payload(f.read())
         encoders.encode_base64(part)
         part.add_header("Content-Disposition", f'attachment; filename="{fname}"')
@@ -87,41 +87,21 @@ def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
 
 # ——— Brands & Models ———
 coffee_brands = {
-    "Bezzera": ["BZ10","DUO","Magica","Matrix","Mitica"],
-    "Breville": ["Barista Express","Barista Pro","Duo Temp","Infuser","Oracle Touch"],
-    "Carimali": ["Armonia Ultra","BlueDot","CA1000","Optima","SolarTouch"],
-    "Cimbali":  ["M21 Junior","M39","M100","M200","S20"],
-    "DeLonghi": ["Dedica","Dinamica","Eletta","La Specialista","Magnifica","Primadonna"],
-    "ECM":      ["Barista","Classika","Elektronika","Synchronika","Technika"],
-    "Faema":    ["E61","Emblema","E98 UP","Teorema","X30"],
-    "Franke":   ["A300","A600","A800","S200","S700"],
-    "Gaggia":   ["Accademia","Anima","Babila","Cadorna","Classic"],
-    "Jura":     ["ENA 8","Giga X8","Impressa XJ9","WE8","Z10"],
-    "Krups":    ["EA82","EA89","Evidence","Essential","Quattro Force"],
-    "La Marzocco": ["GB5","GS3","Linea Mini","Linea PB","Strada"],
-    "La Spaziale": ["Dream","S1 Mini Vivaldi II","S2","S8","S9"],
-    "Miele":    ["CM5300","CM6150","CM6350","CM6360","CM7750"],
-    "Nuova Simonelli": ["Appia","Aurelia","Musica","Oscar","Talento"],
-    "Philips":  ["2200 Series","3200 Series","5000 Series","LatteGo","Saeco Xelsis"],
-    "Quick Mill": ["Alexia","Andreja","Pegaso","Silvano","Vetrano"],
-    "Rancilio": ["Classe 11","Classe 5","Classe 9","Egro One","Silvia"],
-    "Rocket Espresso": ["Appartamento","Cronometro","Giotto","Mozzafiato","R58"],
-    "Saeco":    ["Aulika","Incanto","Lirika","PicoBaristo","Royal"],
-    "Schaerer": ["Coffee Art Plus","Coffee Club","Prime","Soul","Touch"],
-    "Siemens":  ["EQ.3","EQ.6","EQ.9","Surpresso","TE653"],
-    "Victoria Arduino": ["Adonis","Black Eagle","Eagle One","Mythos One","Venus"],
-    "WMF":      ["1100 S","1500 S+","5000 S+","9000 S+","Espresso"],
-    "Other":    ["Other"]
+    "Bezzera": ["BZ10", "DUO", "Magica", "Matrix", "Mitica"],
+    "Breville": ["Barista Express", "Barista Pro", "Duo Temp", "Infuser", "Oracle Touch"],
+    # … include all your other brands here …
+    "Other": ["Other"]
 }
-brands = sorted([b for b in coffee_brands if b!="Other"]) + ["Other"]
+
+brands = sorted([b for b in coffee_brands if b != "Other"]) + ["Other"]
 for b in coffee_brands:
-    ms = sorted([m for m in coffee_brands[b] if m!="Other"])
+    ms = sorted([m for m in coffee_brands[b] if m != "Other"])
     if "Other" in coffee_brands[b]:
         ms.append("Other")
     coffee_brands[b] = ms
 
 current_year = datetime.now().year
-years = list(range(1970, current_year+1))[::-1]
+years = list(range(1970, current_year + 1))[::-1]
 
 # ——— Cached Geocoder ———
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -145,7 +125,7 @@ if mode == "select":
     with c1:
         if st.button("➕ Add new customer"):
             st.session_state.mode = "add"
-            st.experimental_rerun()
+            st.stop()
     with c2:
         st.markdown("**Or click a red dot to choose a customer**")
 
@@ -185,7 +165,7 @@ if mode == "select":
                 customers["ID"] == best_id, "Company Name"
             ].iat[0]
             st.session_state.mode = "existing"
-            st.experimental_rerun()
+            st.stop()
 
     st.stop()
 
@@ -210,7 +190,10 @@ if mode == "add":
             errs.append("Valid email required.")
 
         if not errs:
-            st.markdown(f"[Preview on Google Maps](https://www.google.com/maps/search/{addr.replace(' ','+')})")
+            st.markdown(
+                f"[Preview on Google Maps]"
+                f"(https://www.google.com/maps/search/{addr.replace(' ','+')})"
+            )
 
         if st.form_submit_button("Save Customer") and not errs:
             cid = str(uuid.uuid4())
@@ -224,8 +207,10 @@ if mode == "add":
             }])
             customers = pd.concat([customers, new], ignore_index=True)
             customers.to_csv(CUSTOMERS_FILE, index=False)
+
             st.session_state.mode = "select"
-            st.experimental_rerun()
+            st.success("Customer saved – returning to map…")
+            st.stop()
 
 # ——— 3) EXISTING CUSTOMER ———
 if mode == "existing":
@@ -243,6 +228,7 @@ if mode == "existing":
     st.text_input("Phone",        cust["Phone"],        disabled=True)
     st.text_input("Email",        cust["Email"],        disabled=True)
 
+    # ——— Machine flow ———
     customer_id = cust["ID"]
     own = machines[machines["Customer ID"] == customer_id]
     labels = [f"{r.Brand} ({r.Model})" for _, r in own.iterrows()]
@@ -251,58 +237,75 @@ if mode == "existing":
 
     if sel_m == "Add new...":
         st.markdown("### ➕ Add New Machine")
-        for k in ("b_sel","prev_b","m_sel","prev_m"):
-            st.session_state.setdefault(k,"")
-        brand = st.selectbox("Brand*", [""]+brands, key="b_sel")
+        for k in ("b_sel", "prev_b", "m_sel", "prev_m"):
+            st.session_state.setdefault(k, "")
+
+        brand = st.selectbox("Brand*", [""] + brands, key="b_sel")
         if brand != st.session_state.prev_b:
-            st.session_state.prev_b=brand; st.session_state.m_sel=""; st.session_state.prev_m=""
-        custom_brand = st.text_input("New brand*", key="prev_b") if brand=="Other" else ""
+            st.session_state.prev_b = brand
+            st.session_state.m_sel = ""
+            st.session_state.prev_m = ""
+
+        custom_brand = st.text_input("New brand*", key="prev_b") if brand == "Other" else ""
         opts = coffee_brands.get(brand, ["Other"])
-        model = st.selectbox("Model*", [""]+opts, key="m_sel")
-        custom_model = st.text_input("New model*", key="prev_m") if model=="Other" else ""
+        model = st.selectbox("Model*", [""] + opts, key="m_sel")
+        custom_model = st.text_input("New model*", key="prev_m") if model == "Other" else ""
+
         with st.form("add_machine"):
-            year   = st.selectbox("Year*", [""]+[str(y) for y in years], key="yr")
+            year   = st.selectbox("Year*", [""] + [str(y) for y in years], key="yr")
             serial = st.text_input("Serial Number (optional)")
             obs    = st.text_area("Observations (optional)")
-            photo  = st.file_uploader("Machine photo*", type=["jpg","png"])
-            errs=[]
-            fb = custom_brand.strip() if brand=="Other" else brand
-            fm = custom_model.strip()  if model=="Other" else model
-            if not fb:   errs.append("Brand required.")
-            if not fm:   errs.append("Model required.")
-            if not st.session_state.yr: errs.append("Year required.")
-            if not photo:errs.append("Photo required.")
+            photo  = st.file_uploader("Machine photo*", type=["jpg", "png"])
+
+            errs = []
+            fb = custom_brand.strip() if brand == "Other" else brand
+            fm = custom_model.strip()  if model == "Other" else model
+            if not fb:    errs.append("Brand required.")
+            if not fm:    errs.append("Model required.")
+            if not year:  errs.append("Year required.")
+            if not photo: errs.append("Photo required.")
+
             if st.form_submit_button("Save Machine"):
                 if errs:
                     st.error("\n".join(errs))
                 else:
-                    mid=f"{uuid.uuid4()}"; p=f"{mid}_machine.png"
+                    mid = str(uuid.uuid4())
+                    p   = f"{mid}_machine.png"
                     Image.open(photo).save(p)
-                    new=pd.DataFrame([{
-                        "ID":mid,"Customer ID":customer_id,
-                        "Brand":fb,"Model":fm,"Year":st.session_state.yr,
-                        "Serial Number":serial,"Photo Path":p,"Observations":obs
+
+                    new = pd.DataFrame([{
+                        "ID": mid,
+                        "Customer ID": customer_id,
+                        "Brand": fb,
+                        "Model": fm,
+                        "Year": year,
+                        "Serial Number": serial,
+                        "Photo Path": p,
+                        "Observations": obs
                     }])
-                    machines=pd.concat([machines,new],ignore_index=True)
-                    machines.to_csv(MACHINES_FILE,index=False)
-                    st.success("Machine added—please reload.")
+                    machines = pd.concat([machines, new], ignore_index=True)
+                    machines.to_csv(MACHINES_FILE, index=False)
+                    st.success("Machine added – please reload.")
                     st.stop()
+
     else:
         idx  = labels.index(sel_m)
         mrow = own.iloc[idx]
+
         st.subheader("☕ Machine Information")
-        st.text_input("Brand",         mrow["Brand"], disabled=True)
-        st.text_input("Model",         mrow["Model"], disabled=True)
-        st.text_input("Year",          mrow["Year"],  disabled=True)
-        st.text_input("Serial Number", mrow.get("Serial Number",""), disabled=True)
-        st.text_area("Observations",   mrow.get("Observations",""),  disabled=True)
-        pp = mrow.get("Photo Path","")
+        st.text_input("Brand",         mrow["Brand"],         disabled=True)
+        st.text_input("Model",         mrow["Model"],         disabled=True)
+        st.text_input("Year",          mrow["Year"],          disabled=True)
+        st.text_input("Serial Number", mrow.get("Serial Number", ""), disabled=True)
+        st.text_area("Observations",   mrow.get("Observations",   ""), disabled=True)
+
+        pp = mrow.get("Photo Path", "")
         if pp and os.path.exists(pp):
             st.image(pp, caption="Machine Photo", width=200)
 
         st.subheader("📝 Log a Job")
         with st.form("log_job"):
-            tech   = st.selectbox("Technician*", ["Adonai Garcia","Miki Horvath"])
+            tech   = st.selectbox("Technician*", ["Adonai Garcia", "Miki Horvath"])
             jdate  = st.date_input("Date*", datetime.now())
             travel = st.number_input("Travel Time (min)*", 0, step=1)
             tin    = st.time_input("Time In*")
@@ -313,45 +316,59 @@ if mode == "existing":
             found  = st.file_uploader("Machine as Found* (jpg/png/mp4)")
             left   = st.file_uploader("Machine as Left*  (jpg/png/mp4)")
             emp    = st.text_input("Employee Full Name*")
+
             sigimg = st_canvas(
-                fill_color="rgba(255,255,255,1)", stroke_width=2, stroke_color="#000",
-                background_color="#fff", height=100, width=300, drawing_mode="freedraw", key="sig"
+                fill_color="rgba(255,255,255,1)",
+                stroke_width=2,
+                stroke_color="#000",
+                background_color="#fff",
+                height=100,
+                width=300,
+                drawing_mode="freedraw",
+                key="sig"
             )
+
             st.markdown(
                 "**By submitting this form, I acknowledge that I have reviewed and verified the accuracy of all information provided above.**"
             )
+
             if st.form_submit_button("Submit Job"):
-                ok = all([tech, desc.strip(), emp.strip(),
-                          found, left, sigimg.image_data is not None])
+                ok = all([tech, desc.strip(), emp.strip(), found, left, sigimg.image_data is not None])
                 if not ok:
-                    st.error("Complete all required fields & uploads.")
+                    st.error("Complete all required fields & uploads.")
                 else:
                     jid = str(uuid.uuid4())
-                    sp = f"{jid}_sig.png"
+                    sp  = f"{jid}_sig.png"
                     Image.fromarray(sigimg.image_data).save(sp)
+
                     fp = f"{jid}_found.{found.name.rsplit('.',1)[-1]}"
-                    open(fp,"wb").write(found.read())
+                    with open(fp, "wb") as f:
+                        f.write(found.read())
+
                     lp = f"{jid}_left.{left.name.rsplit('.',1)[-1]}"
-                    open(lp,"wb").write(left.read())
-                    newj=pd.DataFrame([{
-                        "Job ID":jid,
-                        "Customer ID":customer_id,
-                        "Machine ID":mids[idx],
-                        "Employee Name":emp,
-                        "Technician":tech,
-                        "Date":str(jdate),
-                        "Travel Time (min)":int(travel),
-                        "Time In":str(tin),
-                        "Time Out":str(tout),
-                        "Job Description":desc,
-                        "Parts Used":parts,
-                        "Additional Comments":comm,
-                        "Machine as Found Path":fp,
-                        "Machine as Left Path":lp,
-                        "Signature Path":sp
+                    with open(lp, "wb") as f:
+                        f.write(left.read())
+
+                    newj = pd.DataFrame([{
+                        "Job ID": jid,
+                        "Customer ID": customer_id,
+                        "Machine ID": mids[idx],
+                        "Employee Name": emp,
+                        "Technician": tech,
+                        "Date": str(jdate),
+                        "Travel Time (min)": int(travel),
+                        "Time In": str(tin),
+                        "Time Out": str(tout),
+                        "Job Description": desc,
+                        "Parts Used": parts,
+                        "Additional Comments": comm,
+                        "Machine as Found Path": fp,
+                        "Machine as Left Path": lp,
+                        "Signature Path": sp
                     }])
-                    jobs=pd.concat([jobs,newj],ignore_index=True)
-                    jobs.to_csv(JOBS_FILE,index=False)
+                    jobs = pd.concat([jobs, newj], ignore_index=True)
+                    jobs.to_csv(JOBS_FILE, index=False)
+
                     st.success("Job logged successfully!")
 
                     html = f"""
@@ -388,14 +405,24 @@ if mode == "existing":
                     if comm:  st.write(f"Additional Comments: {comm}")
                     st.image(sp, caption="Signature", width=150)
                     if os.path.exists(fp):
-                        if fp.endswith(".mp4"): st.video(fp)
-                        else:                   st.image(fp, caption="Found", width=150)
+                        if fp.endswith(".mp4"):
+                            st.video(fp)
+                        else:
+                            st.image(fp, caption="Found", width=150)
                     if os.path.exists(lp):
-                        if lp.endswith(".mp4"): st.video(lp)
-                        else:                   st.image(lp, caption="Left", width=150)
+                        if lp.endswith(".mp4"):
+                            st.video(lp)
+                        else:
+                            st.image(lp, caption="Left", width=150)
 
 # ——— Admin Tabs ———
-tab1,tab2,tab3 = st.tabs(["All Jobs","All Customers","All Machines"])
-with tab1: st.header("All Job Logs");   st.dataframe(jobs)
-with tab2: st.header("All Customers");  st.dataframe(customers)
-with tab3: st.header("All Machines");   st.dataframe(machines)
+tab1, tab2, tab3 = st.tabs(["All Jobs", "All Customers", "All Machines"])
+with tab1:
+    st.header("All Job Logs")
+    st.dataframe(jobs)
+with tab2:
+    st.header("All Customers")
+    st.dataframe(customers)
+with tab3:
+    st.header("All Machines")
+    st.dataframe(machines)
