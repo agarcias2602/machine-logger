@@ -61,21 +61,23 @@ def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
     alt.attach(MIMEText(html_body, "html"))
     msg.attach(alt)
 
+    # signature attachment
     if sig_path and os.path.exists(sig_path):
         ctype, _ = mimetypes.guess_type(sig_path)
         maintype, subtype = ctype.split("/",1)
-        part = MIMEBase(maintype, subtype)
         with open(sig_path, "rb") as f:
+            part = MIMEBase(maintype, subtype)
             part.set_payload(f.read())
         encoders.encode_base64(part)
         part.add_header("Content-Disposition", 'attachment; filename="signature.png"')
         msg.attach(part)
 
+    # machine-left attachment
     if left_path and os.path.exists(left_path):
         ctype, _ = mimetypes.guess_type(left_path)
         maintype, subtype = ctype.split("/",1)
-        part = MIMEBase(maintype, subtype)
         with open(left_path, "rb") as f:
+            part = MIMEBase(maintype, subtype)
             part.set_payload(f.read())
         encoders.encode_base64(part)
         filename = os.path.basename(left_path)
@@ -124,7 +126,7 @@ for b in coffee_brands:
 current_year = datetime.now().year
 years = list(range(1970, current_year+1))[::-1]
 
-# --- 1) MAP SELECTION OF CUSTOMER ---
+# --- Prepare geocoded coords for each customer ---
 if "coords" not in st.session_state:
     geolocator = Nominatim(user_agent="machine_logger")
     coords = {}
@@ -137,43 +139,63 @@ if "coords" not in st.session_state:
             coords[row["ID"]] = (None, None)
     st.session_state.coords = coords
 
+# --- Session state for selection ---
 if "selected_customer" not in st.session_state:
-    st.session_state.selected_customer = None
+    st.session_state.selected_customer = ""
+if "selected_dropdown" not in st.session_state:
+    st.session_state.selected_dropdown = ""
 
-if st.session_state.selected_customer is None:
-    m = folium.Map(location=[43.651070, -79.347015], zoom_start=12)
-    fg = folium.FeatureGroup(name="customers")
-    for cid, (lat, lon) in st.session_state.coords.items():
-        if lat and lon:
+# --- 1) DROPDOWN SELECTION ---
+dropdown = st.selectbox(
+    "Select customer",
+    [""] + customers["Company Name"].tolist(),
+    key="selected_dropdown"
+)
+if dropdown and dropdown != st.session_state.selected_customer:
+    st.session_state.selected_customer = dropdown
+
+# --- 2) MAP SELECTION ---
+m = folium.Map(location=[43.7, -79.4], zoom_start=10)
+fg = folium.FeatureGroup(name="customers")
+for cid, (lat, lon) in st.session_state.coords.items():
+    if lat and lon:
+        cname = customers.loc[customers["ID"]==cid, "Company Name"].iat[0]
+        folium.Marker(
+            [lat, lon],
+            tooltip=cname
+        ).add_to(fg)
+fg.add_to(m)
+Search(
+    layer=fg,
+    search_label="tooltip",
+    placeholder="Search customer...",
+    collapsed=False
+).add_to(m)
+folium.LayerControl().add_to(m)
+
+st.markdown("## Or select a customer on the map")
+map_data = st_folium(m, width=700, height=400)
+if map_data and map_data.get("last_object_clicked"):
+    lat = map_data["last_object_clicked"]["lat"]
+    lng = map_data["last_object_clicked"]["lng"]
+    for cid, (clat, clon) in st.session_state.coords.items():
+        if clat and clon and abs(clat - lat) < 1e-4 and abs(clon - lng) < 1e-4:
             cname = customers.loc[customers["ID"]==cid, "Company Name"].iat[0]
-            folium.Marker(
-                [lat, lon],
-                tooltip=cname
-            ).add_to(fg)
-    fg.add_to(m)
-    Search(
-        layer=fg,
-        search_label="tooltip",
-        placeholder="Search customer...",
-        collapsed=False
-    ).add_to(m)
-    folium.LayerControl().add_to(m)
-
-    st.markdown("## Select a Customer on the Map")
-    map_data = st_folium(m, width=700, height=450)
-
-    if map_data and map_data.get("last_object_clicked"):
-        click = map_data["last_object_clicked"]
-        for cid, (lat, lon) in st.session_state.coords.items():
-            if lat and lon and abs(lat - click["lat"]) < 1e-4 and abs(lon - click["lng"]) < 1e-4:
-                st.session_state.selected_customer = customers.loc[customers["ID"]==cid, "Company Name"].iat[0]
+            if cname != st.session_state.selected_customer:
+                st.session_state.selected_customer = cname
+                st.session_state.selected_dropdown = cname
                 st.experimental_rerun()
+
+# If still no selection, prompt
+if not st.session_state.selected_customer:
+    st.info("Please select a customer via the dropdown or the map above.")
     st.stop()
 
-# --- 2) VIEW CUSTOMER INFO ---
+# --- Now selected_customer is set ---
 sel_cust = st.session_state.selected_customer
-cust_row = customers.loc[customers["Company Name"]==sel_cust].iloc[0]
+cust_row = customers[customers["Company Name"]==sel_cust].iloc[0]
 
+# --- VIEW SELECTED CUSTOMER INFO ---
 st.subheader("Customer Information")
 st.text_input("Company Name", value=cust_row.get("Company Name",""), disabled=True)
 st.text_input("Contact Name", value=cust_row.get("Contact Name",""), disabled=True)
@@ -181,7 +203,7 @@ st.text_input("Address",      value=cust_row.get("Address",""),      disabled=Tr
 st.text_input("Phone",        value=cust_row.get("Phone",""),        disabled=True)
 st.text_input("Email",        value=cust_row.get("Email",""),        disabled=True)
 
-# --- 3) MACHINE SELECTION & FLOW ---
+# --- MACHINE SELECTION & FLOW ---
 customer_id = cust_row["ID"]
 cust_machs  = machines[machines["Customer ID"]==customer_id]
 labels      = [f"{r.Brand} ({r.Model})" for _,r in cust_machs.iterrows()]
@@ -199,7 +221,7 @@ if sel_machine=="Add new...":
         st.session_state.custom_model=""
         st.session_state.custom_brand=""
     custom_brand = st.text_input("Enter new brand*", key="custom_brand") if brand=="Other" else ""
-    opts = coffee_brands.get(brand,["Other"] if brand=="Other" else [])
+    opts = coffee_brands.get(brand, ["Other"] if brand=="Other" else [])
     model = st.selectbox("Model*", [""]+opts, key="model_sel")
     custom_model = st.text_input("Enter new model*", key="custom_model") if model=="Other" else ""
     with st.form("new_machine"):
@@ -218,12 +240,12 @@ if sel_machine=="Add new...":
             if errs:
                 st.error("\n".join(errs))
             else:
-                mid = str(uuid.uuid4()); p = f"{mid}_machine.png"
-                Image.open(photo).save(p)
+                mid = str(uuid.uuid4()); path=f"{mid}_machine.png"
+                Image.open(photo).save(path)
                 new = pd.DataFrame([{
                     "ID":mid,"Customer ID":customer_id,
                     "Brand":fb,"Model":fm,"Year":st.session_state.year,
-                    "Serial Number":serial,"Photo Path":p,"Observations":obs
+                    "Serial Number":serial,"Photo Path":path,"Observations":obs
                 }])
                 machines = pd.concat([machines,new],ignore_index=True)
                 machines.to_csv(MACHINES_FILE,index=False)
@@ -233,11 +255,11 @@ else:
     idx  = labels.index(sel_machine)
     mrow = cust_machs.iloc[idx]
     st.subheader("Machine Information")
-    st.text_input("Brand", value=mrow.get("Brand",""), disabled=True)
-    st.text_input("Model", value=mrow.get("Model",""), disabled=True)
-    st.text_input("Year", value=mrow.get("Year",""), disabled=True)
+    st.text_input("Brand",         value=mrow.get("Brand",""),         disabled=True)
+    st.text_input("Model",         value=mrow.get("Model",""),         disabled=True)
+    st.text_input("Year",          value=mrow.get("Year",""),          disabled=True)
     st.text_input("Serial Number", value=mrow.get("Serial Number",""), disabled=True)
-    st.text_area("Observations", value=mrow.get("Observations",""), disabled=True)
+    st.text_area("Observations",   value=mrow.get("Observations",""),   disabled=True)
     pp = mrow.get("Photo Path","")
     if pp and os.path.exists(pp):
         st.image(pp, caption="Machine Photo", width=200)
@@ -260,7 +282,6 @@ else:
             stroke_color="#000", background_color="#fff",
             height=100, width=300, drawing_mode="freedraw", key="sig"
         )
-
         st.markdown(
             "**By submitting this form, I acknowledge that I have reviewed and verified the accuracy of all information provided above.**"
         )
@@ -315,7 +336,6 @@ else:
 <p>We appreciate your business and look forward to serving you again.</p>
 <p>Sincerely,<br/>Machine Hunter Service Team</p>
 """
-
                 cust_email = cust_row.get("Email","")
                 send_job_email(job_id, cust_email, html, sig_path, lpath)
 
