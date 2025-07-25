@@ -15,271 +15,271 @@ JOBS_FILE = "jobs.csv"
 CUSTOMERS_COLUMNS = ["ID", "Company Name", "Contact Name", "Address", "Phone", "Email"]
 MACHINES_COLUMNS = ["ID", "Customer ID", "Brand", "Model", "Year", "Serial Number", "Photo Path", "Observations"]
 JOBS_COLUMNS = [
-    "Job ID", "Customer ID", "Machine ID", "Employee Name", "Technician",
-    "Date", "Travel Time (min)", "Time In", "Time Out", "Job Description",
-    "Parts Used", "Additional Comments",
-    "Machine as Found Path", "Machine as Left Path", "Signature Path"
+    "Job ID","Customer ID","Machine ID","Employee Name","Technician",
+    "Date","Travel Time (min)","Time In","Time Out","Job Description",
+    "Parts Used","Additional Comments",
+    "Machine as Found Path","Machine as Left Path","Signature Path"
 ]
 
-def load_df(filename, columns):
-    if os.path.exists(filename):
-        return pd.read_csv(filename)
-    else:
-        return pd.DataFrame(columns=columns)
+def load_df(filename, cols):
+    return pd.read_csv(filename) if os.path.exists(filename) else pd.DataFrame(columns=cols)
 
 customers = load_df(CUSTOMERS_FILE, CUSTOMERS_COLUMNS)
-machines = load_df(MACHINES_FILE, MACHINES_COLUMNS)
-jobs = load_df(JOBS_FILE, JOBS_COLUMNS)
+machines  = load_df(MACHINES_FILE,  MACHINES_COLUMNS)
+jobs      = load_df(JOBS_FILE,      JOBS_COLUMNS)
 
 st.title("Coffee Machine Service Logger")
 
-# ------------------ Brands & Models ------------------
+# --- Brands & models data ---
 coffee_brands = {
-    "Bezzera": ["BZ10", "Magica", "Matrix", "DUO", "Mitica"],
-    "Breville": ["Barista Express", "Barista Pro", "Oracle Touch", "Duo Temp", "Infuser"],
-    "Carimali": ["Armonia Ultra", "BlueDot", "CA1000", "Optima", "SolarTouch"],
-    "Cimbali": ["M21 Junior", "M39", "M100", "M200", "S20"],
-    "DeLonghi": ["Dedica", "Dinamica", "Eletta", "La Specialista", "Magnifica", "Primadonna"],
-    "ECM": ["Barista", "Classika", "Elektronika", "Synchronika", "Technika"],
-    "Faema": ["E61", "Emblema", "E98 UP", "Teorema", "X30"],
-    "Franke": ["A300", "A600", "A800", "S200", "S700"],
-    "Gaggia": ["Accademia", "Anima", "Babila", "Cadorna", "Classic"],
-    "Jura": ["ENA 8", "Giga X8", "Impressa XJ9", "WE8", "Z10"],
-    "Krups": ["EA82", "EA89", "Evidence", "Essential", "Quattro Force"],
-    "La Marzocco": ["GB5", "GS3", "Linea Mini", "Linea PB", "Strada"],
-    "La Spaziale": ["Dream", "S1 Mini Vivaldi II", "S2", "S8", "S9"],
-    "Miele": ["CM5300", "CM6150", "CM6350", "CM6360", "CM7750"],
-    "Nuova Simonelli": ["Appia", "Aurelia", "Musica", "Oscar", "Talento"],
-    "Philips": ["2200 Series", "3200 Series", "5000 Series", "LatteGo", "Saeco Xelsis"],
-    "Quick Mill": ["Alexia", "Andreja", "Pegaso", "Silvano", "Vetrano"],
-    "Rancilio": ["Classe 11", "Classe 5", "Classe 9", "Egro One", "Silvia"],
-    "Rocket Espresso": ["Appartamento", "Cronometro", "Giotto", "Mozzafiato", "R58"],
-    "Saeco": ["Aulika", "Incanto", "Lirika", "PicoBaristo", "Royal"],
-    "Schaerer": ["Coffee Art Plus", "Coffee Club", "Prime", "Soul", "Touch"],
-    "Siemens": ["EQ.3", "EQ.6", "EQ.9", "Surpresso", "TE653"],
-    "Victoria Arduino": ["Adonis", "Black Eagle", "Eagle One", "Mythos One", "Venus"],
-    "WMF": ["1100 S", "1500 S+", "5000 S+", "9000 S+", "Espresso"],
+    "Bezzera": ["BZ10","DUO","Magica","Matrix","Mitica"],
+    "Breville": ["Barista Express","Barista Pro","Duo Temp","Infuser","Oracle Touch"],
+    "Carimali": ["Armonia Ultra","BlueDot","CA1000","Optima","SolarTouch"],
+    "Cimbali": ["M21 Junior","M39","M100","M200","S20"],
+    "DeLonghi": ["Dedica","Dinamica","Eletta","La Specialista","Magnifica","Primadonna"],
+    "ECM": ["Barista","Classika","Elektronika","Synchronika","Technika"],
+    "Faema": ["E61","Emblema","E98 UP","Teorema","X30"],
+    "Franke": ["A300","A600","A800","S200","S700"],
+    "Gaggia": ["Accademia","Anima","Babila","Cadorna","Classic"],
+    "Jura": ["ENA 8","Giga X8","Impressa XJ9","WE8","Z10"],
+    "Krups": ["EA82","EA89","Evidence","Essential","Quattro Force"],
+    "La Marzocco": ["GB5","GS3","Linea Mini","Linea PB","Strada"],
+    "La Spaziale": ["Dream","S1 Mini Vivaldi II","S2","S8","S9"],
+    "Miele": ["CM5300","CM6150","CM6350","CM6360","CM7750"],
+    "Nuova Simonelli": ["Appia","Aurelia","Musica","Oscar","Talento"],
+    "Philips": ["2200 Series","3200 Series","5000 Series","LatteGo","Saeco Xelsis"],
+    "Quick Mill": ["Alexia","Andreja","Pegaso","Silvano","Vetrano"],
+    "Rancilio": ["Classe 11","Classe 5","Classe 9","Egro One","Silvia"],
+    "Rocket Espresso": ["Appartamento","Cronometro","Giotto","Mozzafiato","R58"],
+    "Saeco": ["Aulika","Incanto","Lirika","PicoBaristo","Royal"],
+    "Schaerer": ["Coffee Art Plus","Coffee Club","Prime","Soul","Touch"],
+    "Siemens": ["EQ.3","EQ.6","EQ.9","Surpresso","TE653"],
+    "Victoria Arduino": ["Adonis","Black Eagle","Eagle One","Mythos One","Venus"],
+    "WMF": ["1100 S","1500 S+","5000 S+","9000 S+","Espresso"],
     "Other": ["Other"]
 }
-# Alphabetize brands (except Other last) and models
-brands_no_other = sorted([b for b in coffee_brands if b != "Other"])
-brand_list_ordered = brands_no_other + ["Other"]
-for brand in coffee_brands:
-    models = sorted([m for m in coffee_brands[brand] if m != "Other"])
-    if "Other" in coffee_brands[brand]:
-        models.append("Other")
-    coffee_brands[brand] = models
 
+# Build ordered brand list (alphabetical, Other last)
+brands_no_other = sorted([b for b in coffee_brands if b!="Other"])
+brand_order = brands_no_other + ["Other"]
+# Sort each model list (Other last)
+for b in coffee_brands:
+    ms = sorted([m for m in coffee_brands[b] if m!="Other"])
+    if "Other" in coffee_brands[b]:
+        ms.append("Other")
+    coffee_brands[b] = ms
+
+# Year options
 current_year = datetime.now().year
-years = list(range(1970, current_year + 1))[::-1]
+years = list(range(1970, current_year+1))[::-1]
 
 # -------------------- CUSTOMER FORM --------------------
-customer_options = customers["Company Name"].tolist()
-selected_customer = st.selectbox("Select customer", ["Add new..."] + customer_options)
+cust_opts = customers["Company Name"].tolist()
+sel_cust = st.selectbox("Select customer", ["Add new..."]+cust_opts)
 
-if selected_customer == "Add new...":
-    with st.form("new_customer"):
-        cname = st.text_input("Company Name*")
+if sel_cust=="Add new...":
+    with st.form("new_cust"):
+        cname   = st.text_input("Company Name*")
         contact = st.text_input("Contact Name*")
-        address = st.text_input("Address* (e.g. 123 Main St, City)")
-        phone = st.text_input("Phone* (000-000-0000)")
-        email = st.text_input("Email* (you@example.com)")
+        addr    = st.text_input("Address* (e.g. 123 Main St, City)")
+        phone   = st.text_input("Phone* (000-000-0000)")
+        email   = st.text_input("Email* (you@example.com)")
 
-        errors = []
-        if not cname.strip(): errors.append("Company Name is required.")
-        if not contact.strip(): errors.append("Contact Name is required.")
-        if not re.match(r'.+\d+.+', address) or len(address.split())<3:
-            errors.append("Enter a real address (e.g. 123 Main St, City).")
+        errs=[]
+        if not cname.strip():   errs.append("Company Name required.")
+        if not contact.strip(): errs.append("Contact Name required.")
+        if not re.match(r'.+\d+.+', addr) or len(addr.split())<3:
+            errs.append("Enter a real address.")
         if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
-            errors.append("Phone must be 000-000-0000.")
+            errs.append("Phone must be 000-000-0000.")
         if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
-            errors.append("Enter a valid email.")
+            errs.append("Enter a valid email.")
 
-        if not errors:
-            map_url = f"https://www.google.com/maps/search/{address.replace(' ','+')}"
-            st.markdown(f"[Preview on Google Maps]({map_url})")
+        if not errs:
+            murl=f"https://www.google.com/maps/search/{addr.replace(' ','+')}"
+            st.markdown(f"[Preview on Google Maps]({murl})")
 
-        submitted = st.form_submit_button("Save Customer")
-        if submitted:
-            if errors:
-                st.error("\n".join(errors))
+        sub=st.form_submit_button("Save Customer")
+        if sub:
+            if errs:
+                st.error("\n".join(errs))
             else:
-                cid = str(uuid.uuid4())
-                new = pd.DataFrame([{
+                cid=str(uuid.uuid4())
+                new=pd.DataFrame([{
                   "ID":cid,"Company Name":cname,"Contact Name":contact,
-                  "Address":address,"Phone":phone,"Email":email
+                  "Address":addr,"Phone":phone,"Email":email
                 }])
                 customers=pd.concat([customers,new],ignore_index=True)
                 customers.to_csv(CUSTOMERS_FILE,index=False)
                 st.success("Customer saved! Reload to select.")
                 st.stop()
+
 else:
     # -------------------- MACHINE FORM --------------------
-    customer_id = customers.loc[customers["Company Name"]==selected_customer, "ID"].iat[0]
-    existing = machines[machines["Customer ID"]==customer_id]
-    machine_labels = [f"{r.Brand} ({r.Model})" for _,r in existing.iterrows()]
-    machine_ids = existing["ID"].tolist()
-    selected_label = st.selectbox("Select machine", ["Add new..."]+machine_labels)
+    cid = customers.loc[customers["Company Name"]==sel_cust,"ID"].iat[0]
+    exist = machines[machines["Customer ID"]==cid]
+    labels = [f"{r.Brand} ({r.Model})" for _,r in exist.iterrows()]
+    ids    = exist["ID"].tolist()
+    sel_lbl= st.selectbox("Select machine", ["Add new..."]+labels)
 
-    if selected_label=="Add new...":
-        # init session_state
-        for key in ("brand_select","prev_brand","model_select","custom_brand","custom_model"):
-            if key not in st.session_state: st.session_state[key]=""
+    if sel_lbl=="Add new...":
+        # Init session_state
+        for k in ("brand","prev_brand","model","custom_brand","custom_model"):
+            if k not in st.session_state: st.session_state[k]=""
 
         with st.form("new_machine"):
-            brand = st.selectbox("Brand*", [""]+brand_list_ordered, key="brand_select")
-            # reset model on brand change
-            if st.session_state.brand_select!=st.session_state.prev_brand:
-                st.session_state.model_select=""
+            # Brand select
+            brand = st.selectbox(
+                "Brand*", [""]+brand_order,
+                index=0 if st.session_state.brand=="" else brand_order.index(st.session_state.brand)+1,
+                key="brand"
+            )
+            # If brand changed, reset model & custom_model
+            if brand!=st.session_state.prev_brand:
+                st.session_state.model=""
                 st.session_state.custom_model=""
-                st.session_state.prev_brand = st.session_state.brand_select
+                st.session_state.prev_brand=brand
 
             custom_brand=""
             if brand=="Other":
-                custom_brand = st.text_input("Enter new brand*", key="custom_brand")
+                custom_brand=st.text_input("Enter new brand*",key="custom_brand")
 
-            # model options
+            # Model options
             if brand in coffee_brands:
-                options = coffee_brands[brand]
+                opts=coffee_brands[brand]
             elif brand=="Other":
-                options=["Other"]
+                opts=["Other"]
             else:
-                options=[]
+                opts=[]
 
-            model = st.selectbox("Model*", [""]+options, key="model_select")
+            model = st.selectbox(
+                "Model*", [""]+opts,
+                index=0 if st.session_state.model=="" else opts.index(st.session_state.model)+1 if st.session_state.model in opts else 0,
+                key="model"
+            )
             custom_model=""
             if model=="Other":
-                custom_model = st.text_input("Enter new model*", key="custom_model")
+                custom_model=st.text_input("Enter new model*",key="custom_model")
 
-            year = st.selectbox("Year*", [""]+[str(y) for y in years])
-            serial=st.text_input("Serial Number (optional)")
-            obs=st.text_area("Observations (optional)")
-            photo=st.file_uploader("Upload machine photo*",type=["jpg","png"])
+            year  = st.selectbox("Year*",[""]+[str(y) for y in years],key="year")
+            serial= st.text_input("Serial Number (optional)",key="serial")
+            obs   = st.text_area("Observations (optional)",key="obs")
+            photo = st.file_uploader("Upload machine photo*",type=["jpg","png"],key="photo")
 
-            errors=[]
-            # finalize brand/model
+            errs=[]
             final_brand=brand
-            if not brand: errors.append("Brand is required.")
+            if not brand: errs.append("Brand required.")
             elif brand=="Other":
-                if not custom_brand.strip(): errors.append("Enter a new brand.")
+                if not custom_brand.strip(): errs.append("Enter new brand.")
                 else: final_brand=custom_brand.strip()
 
             final_model=model
-            if not model: errors.append("Model is required.")
+            if not model: errs.append("Model required.")
             elif model=="Other":
-                if not custom_model.strip(): errors.append("Enter a new model.")
+                if not custom_model.strip(): errs.append("Enter new model.")
                 else: final_model=custom_model.strip()
 
-            if not year: errors.append("Year is required.")
-            if not photo: errors.append("Photo is required.")
+            if not year: errs.append("Year required.")
+            if not photo: errs.append("Photo required.")
 
-            submitted = st.form_submit_button("Save Machine")
-            if submitted:
-                if errors:
-                    st.error("\n".join(errors))
+            sub2=st.form_submit_button("Save Machine")
+            if sub2:
+                if errs:
+                    st.error("\n".join(errs))
                 else:
                     mid=str(uuid.uuid4())
-                    ppath=""
-                    img=Image.open(photo)
-                    ppath=f"{mid}_machine.png"
-                    img.save(ppath)
-                    new = pd.DataFrame([{
-                        "ID":mid,"Customer ID":customer_id,
-                        "Brand":final_brand,"Model":final_model,
-                        "Year":year,"Serial Number":serial,
-                        "Photo Path":ppath,"Observations":obs
+                    pth=f"{mid}_machine.png"
+                    Image.open(photo).save(pth)
+                    newm=pd.DataFrame([{
+                      "ID":mid,"Customer ID":cid,
+                      "Brand":final_brand,"Model":final_model,
+                      "Year":year,
+                      "Serial Number":serial,
+                      "Photo Path":pth,
+                      "Observations":obs
                     }])
-                    machines=pd.concat([machines,new],ignore_index=True)
+                    machines=pd.concat([machines,newm],ignore_index=True)
                     machines.to_csv(MACHINES_FILE,index=False)
                     st.success("Machine saved! Reload to select.")
                     st.stop()
 
     else:
-        idx=machine_labels.index(selected_label)
-        selected_machine_id=machine_ids[idx]
+        idx = labels.index(sel_lbl)
+        mid = ids[idx]
 
         # -------------------- JOB FORM --------------------
         st.subheader("Log a Job")
         with st.form("log_job"):
-            employee=st.text_input("Employee Name")
+            employee = st.text_input("Employee Name")
             technician=st.selectbox("Technician",["Adonai Garcia","Miki Horvath"])
-            job_date=st.date_input("Date", datetime.now())
-            travel_time=st.number_input("Travel Time (minutes)",0,step=1)
-            time_in=st.time_input("Time In")
-            time_out=st.time_input("Time Out")
-            desc=st.text_area("Job Description")
-            parts=st.text_area("Parts Used (optional)")
-            comments=st.text_area("Additional Comments (optional)")
-            found=st.file_uploader("Machine as Found",type=["jpg","png","mp4"])
-            left=st.file_uploader("Machine as Left",type=["jpg","png","mp4"])
+            job_date = st.date_input("Date",datetime.now())
+            travel_time=st.number_input("Travel Time (min)",0,step=1)
+            time_in  =st.time_input("Time In")
+            time_out =st.time_input("Time Out")
+            desc     =st.text_area("Job Description")
+            parts    =st.text_area("Parts Used (optional)")
+            comments =st.text_area("Additional Comments (optional)")
+            found    =st.file_uploader("Machine as Found",type=["jpg","png","mp4"])
+            left     =st.file_uploader("Machine as Left",type=["jpg","png","mp4"])
             st.write("Draw signature:")
-            sigimg=st_canvas(fill_color="rgba(255,255,255,1)",stroke_width=2,
-                             stroke_color="#000",background_color="#fff",
-                             height=100,width=300, drawing_mode="freedraw",key="signature")
+            sigimg   =st_canvas(fill_color="rgba(255,255,255,1)",stroke_width=2,
+                        stroke_color="#000",background_color="#fff",
+                        height=100,width=300,drawing_mode="freedraw",key="sig")
 
-            submitted=st.form_submit_button("Submit Job")
+            sub3=st.form_submit_button("Submit Job")
             req=all([employee,technician,job_date,travel_time,time_in,time_out,desc])
-            if submitted and req:
+            if sub3 and req:
                 jid=str(uuid.uuid4())
-                sigpath=""
+                sigpth=""
                 if sigimg.image_data is not None:
-                    im=Image.fromarray(sigimg.image_data)
-                    sigpath=f"{jid}_signature.png"
-                    im.save(sigpath)
-                fpath=""
+                    img=Image.fromarray(sigimg.image_data)
+                    sigpth=f"{jid}_signature.png"; img.save(sigpth)
+                fpth=""
                 if found:
-                    ext=found.name.split(".")[-1]
-                    fpath=f"{jid}_found.{ext}"
-                    open(fpath,"wb").write(found.read())
-                lpath=""
+                    ext=found.name.split(".")[-1]; fpth=f"{jid}_found.{ext}"
+                    open(fpth,"wb").write(found.read())
+                lpth=""
                 if left:
-                    ext=left.name.split(".")[-1]
-                    lpath=f"{jid}_left.{ext}"
-                    open(lpath,"wb").write(left.read())
-                new= pd.DataFrame([{
-                    "Job ID":jid,"Customer ID":customer_id,
-                    "Machine ID":selected_machine_id,
-                    "Employee Name":employee,"Technician":technician,
-                    "Date":str(job_date),
-                    "Travel Time (min)":int(travel_time),
-                    "Time In":str(time_in),"Time Out":str(time_out),
-                    "Job Description":desc,"Parts Used":parts,
-                    "Additional Comments":comments,
-                    "Machine as Found Path":fpath,
-                    "Machine as Left Path":lpath,
-                    "Signature Path":sigpath
+                    ext=left.name.split(".")[-1]; lpth=f"{jid}_left.{ext}"
+                    open(lpth,"wb").write(left.read())
+                newj=pd.DataFrame([{
+                  "Job ID":jid,"Customer ID":cid,
+                  "Machine ID":mid,
+                  "Employee Name":employee,"Technician":technician,
+                  "Date":str(job_date),
+                  "Travel Time (min)":int(travel_time),
+                  "Time In":str(time_in),"Time Out":str(time_out),
+                  "Job Description":desc,
+                  "Parts Used":parts,
+                  "Additional Comments":comments,
+                  "Machine as Found Path":fpth,
+                  "Machine as Left Path":lpth,
+                  "Signature Path":sigpth
                 }])
-                jobs=pd.concat([jobs,new],ignore_index=True)
+                jobs=pd.concat([jobs,newj],ignore_index=True)
                 jobs.to_csv(JOBS_FILE,index=False)
-                st.success("Job logged successfully!")
+                st.success("Job logged!")
                 st.markdown("### Preview")
-                st.write(f"Customer: {selected_customer}")
-                st.write(f"Machine: {selected_label}")
+                st.write(f"Customer: {sel_cust}")
+                st.write(f"Machine: {sel_lbl}")
                 st.write(f"Employee: {employee}")
                 st.write(f"Technician: {technician}")
                 st.write(f"Date: {job_date}")
                 st.write(f"Travel Time: {travel_time} min")
-                st.write(f"Time In: {time_in}")
-                st.write(f"Time Out: {time_out}")
-                st.write(f"Job Description: {desc}")
+                st.write(f"Time In: {time_in}"); st.write(f"Time Out: {time_out}")
+                st.write(f"Description: {desc}")
                 if parts: st.write(f"Parts Used: {parts}")
                 if comments: st.write(f"Additional Comments: {comments}")
-                if sigpath: st.image(sigpath,caption="Signature",width=150)
-                if fpath and os.path.exists(fpath):
-                    if fpath.endswith(".mp4"): st.video(fpath)
-                    else: st.image(fpath,caption="Machine as Found",width=150)
-                if lpath and os.path.exists(lpath):
-                    if lpath.endswith(".mp4"): st.video(lpath)
-                    else: st.image(lpath,caption="Machine as Left",width=150)
+                if sigpth: st.image(sigpth,caption="Signature",width=150)
+                if fpth and os.path.exists(fpth):
+                    if fpth.endswith(".mp4"): st.video(fpth)
+                    else: st.image(fpth,caption="Machine as Found",width=150)
+                if lpth and os.path.exists(lpth):
+                    if lpth.endswith(".mp4"): st.video(lpth)
+                    else: st.image(lpth,caption="Machine as Left",width=150)
 
 # --- Admin Tabs ---
-tab1,tab2,tab3=st.tabs(["All Jobs","All Customers","All Machines"])
-with tab1:
-    st.header("All Job Logs")
-    st.dataframe(jobs)
-with tab2:
-    st.header("All Customers")
-    st.dataframe(customers)
-with tab3:
-    st.header("All Machines")
-    st.dataframe(machines)
+t1,t2,t3=st.tabs(["All Jobs","All Customers","All Machines"])
+with t1: st.header("All Job Logs"); st.dataframe(jobs)
+with t2: st.header("All Customers"); st.dataframe(customers)
+with t3: st.header("All Machines"); st.dataframe(machines)
