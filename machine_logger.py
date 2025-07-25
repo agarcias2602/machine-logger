@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import pandas as pd
 import uuid
@@ -6,12 +7,11 @@ from streamlit_drawable_canvas import st_canvas
 import os
 from datetime import datetime
 
-# File names
+# --- File names and columns ---
 CUSTOMERS_FILE = "customers.csv"
 MACHINES_FILE = "machines.csv"
 JOBS_FILE = "jobs.csv"
 
-# Updated columns
 CUSTOMERS_COLUMNS = ["ID", "Company Name", "Contact Name", "Address", "Phone", "Email"]
 MACHINES_COLUMNS = ["ID", "Customer ID", "Brand", "Model", "Year", "Serial Number", "Photo Path", "Observations"]
 JOBS_COLUMNS = [
@@ -21,7 +21,6 @@ JOBS_COLUMNS = [
     "Machine as Found Path", "Machine as Left Path", "Signature Path"
 ]
 
-# Helpers to load or create CSVs
 def load_df(filename, columns):
     if os.path.exists(filename):
         return pd.read_csv(filename)
@@ -40,26 +39,53 @@ selected_customer = st.selectbox("Select customer", ["Add new..."] + customer_op
 
 if selected_customer == "Add new...":
     with st.form("new_customer"):
-        cname = st.text_input("Company Name")
-        contact = st.text_input("Contact Name")
-        address = st.text_input("Address")
-        phone = st.text_input("Phone")
-        email = st.text_input("Email")
+        cname = st.text_input("Company Name*")
+        contact = st.text_input("Contact Name*")
+        address = st.text_input("Address* (e.g. 123 Main St, City)")
+        phone = st.text_input("Phone* (000-000-0000)")
+        email = st.text_input("Email* (you@example.com)")
+
+        # --- Validation ---
+        errors = []
+        if cname.strip() == "":
+            errors.append("Company Name is required.")
+        if contact.strip() == "":
+            errors.append("Contact Name is required.")
+        # Address: must contain number and street at minimum
+        if not re.match(r'.+\d+.+', address) or len(address.split()) < 3:
+            errors.append("Please enter a real address (e.g. 123 Main St, City).")
+        # Phone number: 000-000-0000
+        if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
+            errors.append("Phone must be in format 000-000-0000.")
+        # Email format
+        if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
+            errors.append("Enter a valid email address (e.g. you@email.com).")
+
+        # Optional: show a Google Maps link preview if address looks OK
+        map_url = ""
+        if len(errors) == 0:
+            map_url = f"https://www.google.com/maps/search/{address.replace(' ', '+')}"
+            st.markdown(f"**[Preview on Google Maps]({map_url})**")
+
         submitted = st.form_submit_button("Save Customer")
-        if submitted and cname and contact:
-            cid = str(uuid.uuid4())
-            new_row = pd.DataFrame([{
-                "ID": cid,
-                "Company Name": cname,
-                "Contact Name": contact,
-                "Address": address,
-                "Phone": phone,
-                "Email": email
-            }])
-            customers = pd.concat([customers, new_row], ignore_index=True)
-            customers.to_csv(CUSTOMERS_FILE, index=False)
-            st.success("Customer saved! Please reload to select.")
-            st.stop()  # Prevent rest of form from loading
+
+        if submitted:
+            if errors:
+                st.error("\n".join(errors))
+            else:
+                cid = str(uuid.uuid4())
+                new_row = pd.DataFrame([{
+                    "ID": cid,
+                    "Company Name": cname,
+                    "Contact Name": contact,
+                    "Address": address,
+                    "Phone": phone,
+                    "Email": email
+                }])
+                customers = pd.concat([customers, new_row], ignore_index=True)
+                customers.to_csv(CUSTOMERS_FILE, index=False)
+                st.success("Customer saved! Please reload to select.")
+                st.stop()  # Prevent rest of form from loading
 
 else:
     # --- MACHINE MANAGEMENT ---
