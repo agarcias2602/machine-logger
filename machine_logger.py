@@ -45,13 +45,7 @@ st.title("☕ Coffee Machine Service Logger")
 def geocode_suggestions(query: str):
     locator = Nominatim(user_agent="machine_logger")
     try:
-        return locator.geocode(
-            query,
-            exactly_one=False,
-            limit=5,
-            country_codes="ca",
-            timeout=10
-        ) or []
+        return locator.geocode(query, exactly_one=False, limit=5, country_codes="ca", timeout=10) or []
     except:
         return []
 
@@ -125,7 +119,7 @@ coffee_brands = {
 }
 brands = sorted([b for b in coffee_brands if b!="Other"]) + ["Other"]
 for b in coffee_brands:
-    ms = sorted([m for m in coffee_brands[b] if m!="Other"])
+    ms = sorted(m for m in coffee_brands[b] if m!="Other")
     if "Other" in coffee_brands[b]:
         ms.append("Other")
     coffee_brands[b] = ms
@@ -136,31 +130,29 @@ years = list(range(1970, current_year+1))[::-1]
 # --- Geocode customer addresses once ---
 if "coords" not in st.session_state:
     locator = Nominatim(user_agent="machine_logger")
-    cs = {}
+    coords = {}
     for _, r in customers.iterrows():
         try:
             loc = locator.geocode(r["Address"], timeout=10)
-            cs[r["ID"]] = (loc.latitude, loc.longitude) if loc else (None,None)
+            coords[r["ID"]] = (loc.latitude, loc.longitude) if loc else (None,None)
         except:
-            cs[r["ID"]] = (None,None)
-    st.session_state.coords = cs
+            coords[r["ID"]] = (None,None)
+    st.session_state.coords = coords
 
 # --- App mode & selection state ---
 if "mode" not in st.session_state:
     st.session_state.mode = "select"            # "select", "add", or "existing"
     st.session_state.selected_customer = None
-    st.session_state.addr_query = ""
-    st.session_state.selected_addr = ""
 
 mode = st.session_state.mode
 
 # === 1) SELECT OR ADD CUSTOMER ===
 if mode == "select":
-    col1, col2 = st.columns([1,3])
-    with col1:
+    c1, c2 = st.columns([1,3])
+    with c1:
         if st.button("➕ Add new customer"):
             st.session_state.mode = "add"
-    with col2:
+    with c2:
         st.markdown("**Or click a red dot to choose a customer**")
 
     m = folium.Map(location=[43.7, -79.4], zoom_start=10, tiles="CartoDB positron")
@@ -190,59 +182,60 @@ if mode == "select":
             ].iat[0]
             st.session_state.mode = "existing"
             st.experimental_rerun()
-
     st.stop()
 
 # === 2) ADD NEW CUSTOMER ===
 if mode == "add":
     st.header("➕ Add New Customer")
     with st.form("add_cust"):
-        cname       = st.text_input("Company Name*", key="cname")
-        contact     = st.text_input("Contact Name*", key="contact")
-        addr_query  = st.text_input("Address*", key="addr_query")
+        cname      = st.text_input("Company Name*")
+        contact    = st.text_input("Contact Name*")
+        addr_query = st.text_input("Address* (start typing…)")
+
         suggestions = geocode_suggestions(addr_query) if addr_query else []
-        st.write("**Select the correct address:**")
-        for loc in suggestions:
-            if st.button(loc.address, key=loc.address):
-                st.session_state.selected_addr = loc.address
-                st.session_state.addr_query = loc.address
-        selected_addr = st.session_state.selected_addr
-        phone       = st.text_input("Phone* (000-000-0000)", key="phone")
-        email       = st.text_input("Email*", key="email")
-        errs = []
-        if not cname.strip(): errs.append("Company Name required.")
-        if not contact.strip(): errs.append("Contact Name required.")
-        if not selected_addr:
-            errs.append("Please select a validated address from suggestions.")
-        if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
-            errs.append("Phone must be 000-000-0000.")
-        if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
-            errs.append("Valid email required.")
-        if not errs and selected_addr:
-            preview_url = selected_addr.replace(" ", "+")
-            st.markdown(f"[Preview on Google Maps]"
-                        f"(https://www.google.com/maps/search/{preview_url})")
-        if st.form_submit_button("Save Customer") and not errs:
-            cid = str(uuid.uuid4())
-            new = pd.DataFrame([{
-                "ID":cid,
-                "Company Name":cname,
-                "Contact Name":contact,
-                "Address":selected_addr,
-                "Phone":phone,
-                "Email":email
-            }])
-            customers = pd.concat([customers,new], ignore_index=True)
-            customers.to_csv(CUSTOMERS_FILE, index=False)
-            try:
-                loc = Nominatim(user_agent="machine_logger").geocode(selected_addr, timeout=10)
-                st.session_state.coords[cid] = (loc.latitude, loc.longitude) if loc else (None,None)
-            except:
-                st.session_state.coords[cid] = (None,None)
-            st.session_state.mode = "select"
-            st.session_state.selected_customer = None
-            st.session_state.selected_addr = ""
-            st.experimental_rerun()
+        address_options = [loc.address for loc in suggestions]
+        selected_addr = st.selectbox("Select validated address*", [""] + address_options)
+
+        phone      = st.text_input("Phone* (000-000-0000)")
+        email      = st.text_input("Email*")
+        submit     = st.form_submit_button("Save Customer")
+
+        if submit:
+            errs = []
+            if not cname.strip(): errs.append("Company Name required.")
+            if not contact.strip(): errs.append("Contact Name required.")
+            if not selected_addr:
+                errs.append("Please choose a validated address.")
+            if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
+                errs.append("Phone must be 000-000-0000.")
+            if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
+                errs.append("Valid email required.")
+            if errs:
+                st.error("\n".join(errs))
+            else:
+                cid = str(uuid.uuid4())
+                new = pd.DataFrame([{
+                    "ID":cid,
+                    "Company Name":cname,
+                    "Contact Name":contact,
+                    "Address":selected_addr,
+                    "Phone":phone,
+                    "Email":email
+                }])
+                customers = pd.concat([customers,new], ignore_index=True)
+                customers.to_csv(CUSTOMERS_FILE, index=False)
+
+                # geocode & update map coords
+                try:
+                    loc = Nominatim(user_agent="machine_logger").geocode(selected_addr, timeout=10)
+                    st.session_state.coords[cid] = (loc.latitude, loc.longitude) if loc else (None,None)
+                except:
+                    st.session_state.coords[cid] = (None,None)
+
+                st.session_state.mode = "select"
+                st.session_state.selected_customer = None
+                st.success("Customer saved! Map updated.")
+                st.experimental_rerun()
 
 # === 3) EXISTING CUSTOMER FLOW ===
 sel_name = st.session_state.selected_customer
@@ -253,11 +246,12 @@ if not sel_name or sel_name not in customers["Company Name"].tolist():
 
 cust = customers.loc[customers["Company Name"] == sel_name].iloc[0]
 st.subheader("👤 Customer Information")
-st.text_input("Company Name", cust["Company Name"], disabled=True)
-st.text_input("Contact Name", cust["Contact Name"], disabled=True)
-st.text_input("Address",      cust["Address"],      disabled=True)
-st.text_input("Phone",        cust["Phone"],        disabled=True)
-st.text_input("Email",        cust["Email"],        disabled=True)
+st.text_input("Company Name",   cust["Company Name"], disabled=True)
+st.text_input("Contact Name",   cust["Contact Name"], disabled=True)
+st.text_input("Address",        cust["Address"],      disabled=True)
+st.text_input("Phone",          cust["Phone"],        disabled=True)
+st.text_input("Email",          cust["Email"],        disabled=True)
+
 
 # --- Machine selection/add/view ---
 customer_id = cust["ID"]
