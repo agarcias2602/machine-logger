@@ -314,8 +314,6 @@ else:
 <p>Dear Customer,</p>
 <p>Thank you for choosing <strong>Machine Hunter</strong> for your service needs. Below are the details of your recent service job:</p>
 <p><strong>Job ID:</strong> {job_id}</p>
-<
-
 <p><strong>Customer:</strong> {sel_cust}</p>
 <p><strong>Machine:</strong> {sel_machine}</p>
 <p><strong>Employee:</strong> {employee}</p>
@@ -327,7 +325,7 @@ else:
 <p><strong>Description:</strong> {desc}</p>
 {f"<p><strong>Parts Used:</strong> {parts}</p>" if parts else ""}
 {f"<p><strong>Additional Comments:</strong> {comments}</p>" if comments else ""}
-<p>Please find attached the technician’s signature and a snapshot of the machine as it was left.</p>
+<p>Please find attached your employee’s signature and a multimedia file of the machine as it was left by our technician.</p>
 <p>We appreciate your business and look forward to serving you again.</p>
 <p>Sincerely,<br/>Machine Hunter Service Team</p>
 """
