@@ -114,7 +114,7 @@ for b in coffee_brands:
 current_year = datetime.now().year
 years = list(range(1970, current_year+1))[::-1]
 
-# ——— Geocode customer addresses once ———
+# ——— Geocode once ———
 if "coords" not in st.session_state:
     locator = Nominatim(user_agent="machine_logger")
     cs = {}
@@ -126,30 +126,29 @@ if "coords" not in st.session_state:
             cs[r["ID"]] = (None,None)
     st.session_state.coords = cs
 
-# ——— Mode & selection state ———
+# ——— State ———
 if "mode" not in st.session_state:
-    st.session_state.mode = "select"            # values: "select", "add", "existing"
+    st.session_state.mode = "select"
     st.session_state.selected_customer = None
 
 mode = st.session_state.mode
 
-# ——— 1) MAP + Add‑Customer button ———
+# ——— 1) SELECT or ADD ———
 if mode == "select":
-    col1, col2 = st.columns([1,3])
-    with col1:
+    c1,c2 = st.columns([1,3])
+    with c1:
         if st.button("➕ Add new customer"):
             st.session_state.mode = "add"
-    with col2:
-        st.markdown("**Or click a red dot to select a customer**")
+    with c2:
+        st.markdown("**Or click a red dot to choose a customer**")
 
     m = folium.Map(location=[43.7, -79.4], zoom_start=10, tiles="CartoDB positron")
     fg = folium.FeatureGroup()
     for cid,(lat,lon) in st.session_state.coords.items():
         if lat and lon:
-            name = customers.loc[customers["ID"]==cid, "Company Name"].iat[0]
+            name = customers.loc[customers["ID"]==cid,"Company Name"].iat[0]
             folium.CircleMarker([lat,lon],
-                radius=6, color="red", fill=True, fill_color="red",
-                tooltip=name
+                radius=6, color="red", fill=True, fill_color="red", tooltip=name
             ).add_to(fg)
     fg.add_to(m)
     Search(layer=fg, search_label="tooltip", placeholder="Search…", collapsed=False).add_to(m)
@@ -162,17 +161,18 @@ if mode == "select":
         for cid,(clat,clon) in st.session_state.coords.items():
             if clat and clon:
                 d = (clat-click["lat"])**2 + (clon-click["lng"])**2
-                if d < bd:
+                if d<bd:
                     best,bd = cid,d
-        if best and bd < 0.0005:
+        if best and bd<0.0005:
             st.session_state.selected_customer = customers.loc[
                 customers["ID"]==best,"Company Name"
             ].iat[0]
             st.session_state.mode = "existing"
+            st.experimental_rerun()
 
     st.stop()
 
-# ——— 2) ADD NEW CUSTOMER ———
+# ——— 2) ADD CUSTOMER ———
 if mode == "add":
     st.header("➕ Add New Customer")
     with st.form("add_cust"):
@@ -182,17 +182,19 @@ if mode == "add":
         phone   = st.text_input("Phone* (000-000-0000)")
         email   = st.text_input("Email*")
         errs=[]
-        if not cname.strip(): errs.append("Company Name is required.")
-        if not contact.strip(): errs.append("Contact Name is required.")
+        if not cname.strip(): errs.append("Company Name required.")
+        if not contact.strip(): errs.append("Contact Name required.")
         if not re.match(r'.+\d+.+', addr) or len(addr.split())<3:
-            errs.append("Enter a valid address.")
+            errs.append("Valid address required.")
         if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
             errs.append("Phone must be 000-000-0000.")
         if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
-            errs.append("Enter a valid email.")
+            errs.append("Valid email required.")
         if not errs:
-            st.markdown(f"[Preview on Google Maps](https://www.google.com/maps/search/{addr.replace(' ','+')})")
+            st.markdown(f"[Preview on Google Maps]("
+                        f"https://www.google.com/maps/search/{addr.replace(' ','+')})")
         if st.form_submit_button("Save Customer") and not errs:
+            # save
             cid = str(uuid.uuid4())
             new = pd.DataFrame([{
                 "ID":cid,
@@ -202,47 +204,53 @@ if mode == "add":
                 "Phone":phone,
                 "Email":email
             }])
-            customers = pd.concat([customers,new], ignore_index=True)
-            customers.to_csv(CUSTOMERS_FILE, index=False)
-            st.success("Customer added—please reload.")
-            st.stop()
+            customers=pd.concat([customers,new],ignore_index=True)
+            customers.to_csv(CUSTOMERS_FILE,index=False)
+            # geocode and update session coords
+            try:
+                loc = Nominatim(user_agent="machine_logger").geocode(addr, timeout=10)
+                st.session_state.coords[cid] = (loc.latitude, loc.longitude) if loc else (None,None)
+            except:
+                st.session_state.coords[cid] = (None,None)
+            # switch back to map
+            st.session_state.mode = "select"
+            st.session_state.selected_customer = None
+            st.experimental_rerun()
 
-# ——— 3) EXISTING CUSTOMER FLOW ———
+# ——— 3) EXISTING CUSTOMER ———
 sel_name = st.session_state.selected_customer
-
-# Guard against missing selection
 if not sel_name or sel_name not in customers["Company Name"].tolist():
     st.session_state.mode = "select"
+    st.warning("Customer not found—please select again.")
     st.stop()
 
-cust = customers.loc[customers["Company Name"] == sel_name].iloc[0]
-
+cust = customers.loc[customers["Company Name"]==sel_name].iloc[0]
 st.subheader("👤 Customer Information")
-st.text_input("Company Name",   cust["Company Name"], disabled=True)
-st.text_input("Contact Name",   cust["Contact Name"], disabled=True)
-st.text_input("Address",        cust["Address"],      disabled=True)
-st.text_input("Phone",          cust["Phone"],        disabled=True)
-st.text_input("Email",          cust["Email"],        disabled=True)
+st.text_input("Company Name", cust["Company Name"], disabled=True)
+st.text_input("Contact Name", cust["Contact Name"], disabled=True)
+st.text_input("Address",      cust["Address"],      disabled=True)
+st.text_input("Phone",        cust["Phone"],        disabled=True)
+st.text_input("Email",        cust["Email"],        disabled=True)
 
-# ——— Machine list & add/view ———
+# ——— Machine flow (add/view) ———
 customer_id = cust["ID"]
 own = machines[machines["Customer ID"]==customer_id]
 labels = [f"{r.Brand} ({r.Model})" for _,r in own.iterrows()]
 mids   = own["ID"].tolist()
 sel_m  = st.selectbox("Select machine", ["Add new..."] + labels, key="machine")
 
-if sel_m == "Add new...":
-    st.markdown("### ➕ Add New Machine")
+if sel_m=="Add new...":
+    st.markdown("### ➕ Add New Machine")
     for k in ("b_sel","prev_b","m_sel","prev_m"): st.session_state.setdefault(k,"")
     brand = st.selectbox("Brand*", [""]+brands, key="b_sel")
     if brand != st.session_state.prev_b:
-        st.session_state.prev_b = brand
-        st.session_state.m_sel  = ""
-        st.session_state.prev_m = ""
-    custom_brand = st.text_input("New brand*", key="prev_b") if brand=="Other" else ""
+        st.session_state.prev_b=brand; st.session_state.m_sel=""; st.session_state.prev_m=""
+    custom_brand = (st.text_input("New brand*", key="prev_b")
+                    if brand=="Other" else "")
     opts = coffee_brands.get(brand, ["Other"] if brand=="Other" else [])
     model = st.selectbox("Model*", [""]+opts, key="m_sel")
-    custom_model = st.text_input("New model*", key="prev_m") if model=="Other" else ""
+    custom_model = (st.text_input("New model*", key="prev_m")
+                    if model=="Other" else "")
     with st.form("add_machine"):
         year   = st.selectbox("Year*", [""]+[str(y) for y in years], key="yr")
         serial = st.text_input("Serial Number (optional)")
@@ -251,28 +259,23 @@ if sel_m == "Add new...":
         errs=[]
         fb = custom_brand.strip() if brand=="Other" else brand
         fm = custom_model.strip() if model=="Other" else model
-        if not fb: errs.append("Brand required.")
-        if not fm: errs.append("Model required.")
+        if not fb:   errs.append("Brand required.")
+        if not fm:   errs.append("Model required.")
         if not st.session_state.yr: errs.append("Year required.")
-        if not photo: errs.append("Photo required.")
+        if not photo:errs.append("Photo required.")
         if st.form_submit_button("Save Machine"):
             if errs:
                 st.error("\n".join(errs))
             else:
-                mid = str(uuid.uuid4()); path=f"{mid}_machine.png"
-                Image.open(photo).save(path)
-                new = pd.DataFrame([{
-                    "ID":mid,
-                    "Customer ID":customer_id,
-                    "Brand":fb,
-                    "Model":fm,
-                    "Year":st.session_state.yr,
-                    "Serial Number":serial,
-                    "Photo Path":path,
-                    "Observations":obs
+                mid=f"{uuid.uuid4()}"; p=f"{mid}_machine.png"
+                Image.open(photo).save(p)
+                new=pd.DataFrame([{
+                    "ID":mid,"Customer ID":customer_id,
+                    "Brand":fb,"Model":fm,"Year":st.session_state.yr,
+                    "Serial Number":serial,"Photo Path":p,"Observations":obs
                 }])
-                machines = pd.concat([machines,new], ignore_index=True)
-                machines.to_csv(MACHINES_FILE, index=False)
+                machines=pd.concat([machines,new],ignore_index=True)
+                machines.to_csv(MACHINES_FILE,index=False)
                 st.success("Machine added—please reload.")
                 st.stop()
 else:
@@ -323,7 +326,7 @@ else:
                 open(fp,"wb").write(found.read())
                 lp = f"{jid}_left.{left.name.rsplit('.',1)[-1]}"
                 open(lp,"wb").write(left.read())
-                newj = pd.DataFrame([{
+                newj=pd.DataFrame([{
                     "Job ID":jid,
                     "Customer ID":customer_id,
                     "Machine ID":mids[idx],
@@ -340,8 +343,8 @@ else:
                     "Machine as Left Path":lp,
                     "Signature Path":sp
                 }])
-                jobs = pd.concat([jobs,newj], ignore_index=True)
-                jobs.to_csv(JOBS_FILE, index=False)
+                jobs=pd.concat([jobs,newj],ignore_index=True)
+                jobs.to_csv(JOBS_FILE,index=False)
                 st.success("Job logged successfully!")
 
                 html = f"""
