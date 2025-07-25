@@ -40,13 +40,18 @@ jobs      = load_df(JOBS_FILE,      JOBS_COLUMNS)
 
 st.title("☕ Coffee Machine Service Logger")
 
-# --- Cacheable geocode suggestions ---
+# --- Cacheable geocode suggestions, restricted to Canada ---
 @st.cache_data(show_spinner=False)
 def geocode_suggestions(query: str):
     locator = Nominatim(user_agent="machine_logger")
     try:
-        locs = locator.geocode(query, exactly_one=False, limit=5, timeout=10)
-        return locs or []
+        return locator.geocode(
+            query,
+            exactly_one=False,
+            limit=5,
+            country_codes="ca",
+            timeout=10
+        ) or []
     except:
         return []
 
@@ -144,6 +149,8 @@ if "coords" not in st.session_state:
 if "mode" not in st.session_state:
     st.session_state.mode = "select"            # "select", "add", or "existing"
     st.session_state.selected_customer = None
+    st.session_state.addr_query = ""
+    st.session_state.selected_addr = ""
 
 mode = st.session_state.mode
 
@@ -156,7 +163,6 @@ if mode == "select":
     with col2:
         st.markdown("**Or click a red dot to choose a customer**")
 
-    # GTA map, greyscale
     m = folium.Map(location=[43.7, -79.4], zoom_start=10, tiles="CartoDB positron")
     fg = folium.FeatureGroup()
     for cid,(lat,lon) in st.session_state.coords.items():
@@ -191,26 +197,31 @@ if mode == "select":
 if mode == "add":
     st.header("➕ Add New Customer")
     with st.form("add_cust"):
-        cname     = st.text_input("Company Name*")
-        contact   = st.text_input("Contact Name*")
-        addr_query = st.text_input("Search Address*")
+        cname       = st.text_input("Company Name*", key="cname")
+        contact     = st.text_input("Contact Name*", key="contact")
+        addr_query  = st.text_input("Address*", key="addr_query")
         suggestions = geocode_suggestions(addr_query) if addr_query else []
-        addresses   = [loc.address for loc in suggestions]
-        selected_addr = st.selectbox("Select Address*", [""] + addresses)
-        phone     = st.text_input("Phone* (000-000-0000)")
-        email     = st.text_input("Email*")
+        st.write("**Select the correct address:**")
+        for loc in suggestions:
+            if st.button(loc.address, key=loc.address):
+                st.session_state.selected_addr = loc.address
+                st.session_state.addr_query = loc.address
+        selected_addr = st.session_state.selected_addr
+        phone       = st.text_input("Phone* (000-000-0000)", key="phone")
+        email       = st.text_input("Email*", key="email")
         errs = []
         if not cname.strip(): errs.append("Company Name required.")
         if not contact.strip(): errs.append("Contact Name required.")
         if not selected_addr:
-            errs.append("Please select a validated address.")
+            errs.append("Please select a validated address from suggestions.")
         if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
             errs.append("Phone must be 000-000-0000.")
         if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
             errs.append("Valid email required.")
-        if not errs:
+        if not errs and selected_addr:
             preview_url = selected_addr.replace(" ", "+")
-            st.markdown(f"[Preview on Google Maps](https://www.google.com/maps/search/{preview_url})")
+            st.markdown(f"[Preview on Google Maps]"
+                        f"(https://www.google.com/maps/search/{preview_url})")
         if st.form_submit_button("Save Customer") and not errs:
             cid = str(uuid.uuid4())
             new = pd.DataFrame([{
@@ -223,7 +234,6 @@ if mode == "add":
             }])
             customers = pd.concat([customers,new], ignore_index=True)
             customers.to_csv(CUSTOMERS_FILE, index=False)
-            # geocode and update coords
             try:
                 loc = Nominatim(user_agent="machine_logger").geocode(selected_addr, timeout=10)
                 st.session_state.coords[cid] = (loc.latitude, loc.longitude) if loc else (None,None)
@@ -231,6 +241,7 @@ if mode == "add":
                 st.session_state.coords[cid] = (None,None)
             st.session_state.mode = "select"
             st.session_state.selected_customer = None
+            st.session_state.selected_addr = ""
             st.experimental_rerun()
 
 # === 3) EXISTING CUSTOMER FLOW ===
@@ -373,21 +384,21 @@ else:
                 html = f"""
 <p>Dear Customer,</p>
 <p>Thank you for choosing <strong>Machine Hunter</strong> for your service needs. Below are your job details:</p>
-<p><strong>Job ID:</strong> {jid}</p>
+<p><strong>Job ID:</strong> {jid}</p>
 <p><strong>Customer:</strong> {sel_name}</p>
 <p><strong>Machine:</strong> {sel_m}</p>
 <p><strong>Employee:</strong> {emp}</p>
 <p><strong>Technician:</strong> {tech}</p>
 <p><strong>Date:</strong> {jdate}</p>
 <p><strong>Travel Time:</strong> {travel} minutes</p>
-<p><strong>Time In:</strong> {tin}</p>
-<p><strong>Time Out:</strong> {tout}</p>
+<p><strong>Time In:</strong> {tin}</p>
+<p><strong>Time Out:</strong> {tout}</p>
 <p><strong>Description:</strong> {desc}</p>
 {f"<p><strong>Parts Used:</strong> {parts}</p>" if parts else ""}
 {f"<p><strong>Additional Comments:</strong> {comm}</p>" if comm else ""}
 <p>Please find attached the technician’s signature and a snapshot of the machine as it was left.</p>
 <p>We appreciate your business and look forward to serving you again.</p>
-<p>Sincerely,<br/>Machine Hunter Service Team</p>
+<p>Sincerely,<br/>Machine Hunter Service Team</p>
 """
                 send_job_email(jid, cust["Email"], html, sp, lp)
 
@@ -398,9 +409,9 @@ else:
                 st.write(f"Technician: {tech}")
                 st.write(f"Date: {jdate}")
                 st.write(f"Travel Time: {travel} minutes")
-                st.write(f"Time In: {tin}   Time Out: {tout}")
+                st.write(f"Time In: {tin}   Time Out: {tout}")
                 st.write(f"Description: {desc}")
-                if parts: st.write(f"Parts Used: {parts}")
+                if parts: st.write(f"Parts Used: {parts}")
                 if comm:  st.write(f"Additional Comments: {comm}")
                 st.image(sp, caption="Signature", width=150)
                 if os.path.exists(fp):
