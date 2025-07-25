@@ -20,7 +20,8 @@ MACHINES_FILE  = "machines.csv"
 JOBS_FILE      = "jobs.csv"
 
 CUSTOMERS_COLUMNS = ["ID","Company Name","Contact Name","Address","Phone","Email"]
-MACHINES_COLUMNS  = ["ID","Customer ID","Brand","Model","Year","Serial Number","Photo Path","Observations"]
+MACHINES_COLUMNS  = ["ID","Customer ID","Brand","Model","Year",
+                     "Serial Number","Photo Path","Observations"]
 JOBS_COLUMNS      = [
     "Job ID","Customer ID","Machine ID","Employee Name","Technician",
     "Date","Travel Time (min)","Time In","Time Out","Job Description",
@@ -169,7 +170,7 @@ if mode == "select":
                 customers["ID"]==best, "Company Name"
             ].iat[0]
             st.session_state.mode = "existing"
-            # ✂ Removed invalid experimental_rerun() here
+            # removed st.experimental_rerun() here
     st.stop()
 
 # —–– 2) ADD CUSTOMER –––—
@@ -206,7 +207,7 @@ if mode == "add":
                     "Phone": phone.strip(),
                     "Email": email.strip()
                 }
-                # reload so we never overwrite concurrent changes
+                # reload to avoid overwriting
                 customers = load_df(CUSTOMERS_FILE, CUSTOMERS_COLUMNS)
                 customers = pd.concat([customers, pd.DataFrame([new_row])],
                                       ignore_index=True)
@@ -214,7 +215,7 @@ if mode == "add":
 
                 # geocode & store
                 try:
-                    loc = Nominatim(user_agent="machine_logger")\
+                    loc = Nominatim(user_agent="machine_logger") \
                              .geocode(addr, timeout=10)
                     st.session_state.coords[cid] = (
                         (loc.latitude, loc.longitude) if loc else (None, None)
@@ -226,7 +227,7 @@ if mode == "add":
                 st.session_state.selected_customer = None
                 st.experimental_rerun()
         else:
-            # show a Google Maps preview when all fields are valid
+            # preview when valid
             if (cname and contact and addr and phone and email and
                 re.match(r'.+\d+.+', addr) and
                 re.match(r'^\d{3}-\d{3}-\d{4}$', phone) and
@@ -333,7 +334,8 @@ else:
             fill_color="rgba(255,255,255,1)",
             stroke_width=2, stroke_color="#000",
             background_color="#fff", height=100, width=300,
-            drawing_mode="freedraw", key="sig"        )
+            drawing_mode="freedraw", key="sig"
+        )
         st.markdown(
             "**By submitting this form, I acknowledge that I have reviewed and verified the accuracy of all information provided above.**"
         )
@@ -371,7 +373,7 @@ else:
                 jobs.to_csv(JOBS_FILE, index=False)
                 st.success("Job logged successfully!")
 
-                # (email + preview logic here…)
+                # send email, show preview...
 
 # —–– Admin tabs –––—
 tab1, tab2, tab3 = st.tabs(["All Jobs","All Customers","All Machines"])
