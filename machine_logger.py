@@ -35,26 +35,37 @@ st.title("Coffee Machine Service Logger")
 
 # ------------------ Coffee brands and models ------------------
 coffee_brands = {
-    "Schaerer": ["Coffee Club", "Coffee Art Plus", "Soul", "Prime", "Touch"],
-    "Jura": ["Giga X8", "ENA 8", "Impressa XJ9", "WE8", "Z10"],
-    "La Marzocco": ["Linea Mini", "GS3", "Strada", "Linea PB", "GB5"],
-    "Nuova Simonelli": ["Aurelia", "Appia", "Oscar", "Musica", "Talento"],
-    "DeLonghi": ["Magnifica", "Dinamica", "Primadonna", "Eletta", "La Specialista"],
-    "Saeco": ["Royal", "Aulika", "Lirika", "PicoBaristo", "Incanto"],
-    "Gaggia": ["Classic", "Anima", "Babila", "Accademia", "Cadorna"],
-    "Rancilio": ["Silvia", "Classe 5", "Classe 9", "Egro One", "Classe 11"],
+    "Bezzera": ["BZ10", "Magica", "Matrix", "DUO", "Mitica"],
     "Breville": ["Barista Express", "Barista Pro", "Oracle Touch", "Duo Temp", "Infuser"],
-    "Krups": ["EA89", "EA82", "Evidence", "Quattro Force", "Essential"],
-    "Rocket Espresso": ["Appartamento", "R58", "Mozzafiato", "Giotto", "Cronometro"],
-    "La Spaziale": ["S1 Mini Vivaldi II", "S2", "S9", "Dream", "S8"],
-    "Cimbali": ["M39", "M100", "M200", "M21 Junior", "S20"],
-    "Faema": ["E61", "Teorema", "Emblema", "E98 UP", "X30"],
-    "Victoria Arduino": ["Black Eagle", "Eagle One", "Venus", "Mythos One", "Adonis"],
-    "Carimali": ["BlueDot", "SolarTouch", "Armonia Ultra", "Optima", "CA1000"],
-    "WMF": ["1500 S+", "5000 S+", "Espresso", "9000 S+", "1100 S"],
+    "Carimali": ["Armonia Ultra", "BlueDot", "CA1000", "Optima", "SolarTouch"],
+    "Cimbali": ["M21 Junior", "M39", "M100", "M200", "S20"],
+    "DeLonghi": ["Dedica", "Dinamica", "Eletta", "La Specialista", "Magnifica", "Primadonna"],
+    "ECM": ["Classika", "Synchronika", "Technika", "Elektronika", "Barista"],
+    "Faema": ["E61", "Emblema", "E98 UP", "Teorema", "X30"],
+    "Franke": ["A300", "A600", "A800", "S700", "S200"],
+    "Gaggia": ["Accademia", "Anima", "Babila", "Cadorna", "Classic"],
+    "Jura": ["ENA 8", "Giga X8", "Impressa XJ9", "WE8", "Z10"],
+    "Krups": ["EA82", "EA89", "Evidence", "Essential", "Quattro Force"],
+    "La Marzocco": ["GB5", "GS3", "Linea Mini", "Linea PB", "Strada"],
+    "La Spaziale": ["Dream", "S1 Mini Vivaldi II", "S2", "S8", "S9"],
+    "Miele": ["CM5300", "CM6150", "CM6350", "CM7750", "CM6360"],
+    "Nuova Simonelli": ["Appia", "Aurelia", "Musica", "Oscar", "Talento"],
+    "Philips": ["2200 Series", "3200 Series", "5000 Series", "LatteGo", "Saeco Xelsis"],
+    "Quick Mill": ["Andreja", "Alexia", "Vetrano", "Silvano", "Pegaso"],
+    "Rancilio": ["Classe 11", "Classe 5", "Classe 9", "Egro One", "Silvia"],
+    "Rocket Espresso": ["Appartamento", "Cronometro", "Giotto", "Mozzafiato", "R58"],
+    "Saeco": ["Aulika", "Incanto", "Lirika", "PicoBaristo", "Royal"],
+    "Schaerer": ["Coffee Art Plus", "Coffee Club", "Prime", "Soul", "Touch"],
+    "Siemens": ["EQ.3", "EQ.6", "EQ.9", "Surpresso", "TE653"],
+    "Victoria Arduino": ["Adonis", "Black Eagle", "Eagle One", "Mythos One", "Venus"],
+    "WMF": ["1100 S", "1500 S+", "5000 S+", "9000 S+", "Espresso"],
     "Other": ["Other"]
 }
-brand_list = list(coffee_brands.keys())
+# Alphabetize brands and all models
+brand_list = sorted(coffee_brands.keys())
+for k in coffee_brands:
+    coffee_brands[k] = sorted(coffee_brands[k])
+
 current_year = datetime.now().year
 years = list(range(1970, current_year + 1))[::-1]  # latest year first
 
@@ -76,13 +87,10 @@ if selected_customer == "Add new...":
             errors.append("Company Name is required.")
         if contact.strip() == "":
             errors.append("Contact Name is required.")
-        # Address: must contain number and street at minimum
         if not re.match(r'.+\d+.+', address) or len(address.split()) < 3:
             errors.append("Please enter a real address (e.g. 123 Main St, City).")
-        # Phone number: 000-000-0000
         if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
             errors.append("Phone must be in format 000-000-0000.")
-        # Email format
         if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
             errors.append("Enter a valid email address (e.g. you@email.com).")
 
@@ -121,24 +129,26 @@ else:
     selected_machine_label = st.selectbox("Select machine", ["Add new..."] + machine_labels)
 
     if selected_machine_label == "Add new...":
+        # This allows model to update live on brand selection
         with st.form("new_machine"):
-            brand = st.selectbox("Brand*", brand_list)
+            # Use session state to remember the brand
+            if "selected_brand" not in st.session_state:
+                st.session_state.selected_brand = brand_list[0]
+            brand = st.selectbox("Brand*", brand_list, key="brand_select")
             model_options = coffee_brands[brand] if brand in coffee_brands else ["Other"]
-            model = st.selectbox("Model*", model_options if model_options else ["Other"])
+            model = st.selectbox("Model*", model_options)
             year = st.selectbox("Year*", [str(y) for y in years])
             serial = st.text_input("Serial Number (optional)")
-            obs = st.text_area("Observations*")
+            obs = st.text_area("Observations (optional)")
             photo = st.file_uploader("Upload machine photo*", type=["jpg", "jpeg", "png"])
 
             errors = []
             if not brand:
                 errors.append("Brand is required.")
-            if not model or (model == "Other" and brand != "Other"):
+            if not model:
                 errors.append("Model is required.")
             if not year:
                 errors.append("Year is required.")
-            if not obs.strip():
-                errors.append("Observations are required.")
             if not photo:
                 errors.append("Photo is required.")
 
