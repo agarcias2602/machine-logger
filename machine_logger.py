@@ -34,7 +34,27 @@ st.title("Coffee Machine Service Logger")
 coffee_brands = {
     "Bezzera": ["BZ10","DUO","Magica","Matrix","Mitica"],
     "Breville": ["Barista Express","Barista Pro","Duo Temp","Infuser","Oracle Touch"],
-    # ... (other brands omitted for brevity; include full list as before) ...
+    "Carimali": ["Armonia Ultra","BlueDot","CA1000","Optima","SolarTouch"],
+    "Cimbali": ["M21 Junior","M39","M100","M200","S20"],
+    "DeLonghi": ["Dedica","Dinamica","Eletta","La Specialista","Magnifica","Primadonna"],
+    "ECM": ["Barista","Classika","Elektronika","Synchronika","Technika"],
+    "Faema": ["E61","Emblema","E98 UP","Teorema","X30"],
+    "Franke": ["A300","A600","A800","S200","S700"],
+    "Gaggia": ["Accademia","Anima","Babila","Cadorna","Classic"],
+    "Jura": ["ENA 8","Giga X8","Impressa XJ9","WE8","Z10"],
+    "Krups": ["EA82","EA89","Evidence","Essential","Quattro Force"],
+    "La Marzocco": ["GB5","GS3","Linea Mini","Linea PB","Strada"],
+    "La Spaziale": ["Dream","S1 Mini Vivaldi II","S2","S8","S9"],
+    "Miele": ["CM5300","CM6150","CM6350","CM6360","CM7750"],
+    "Nuova Simonelli": ["Appia","Aurelia","Musica","Oscar","Talento"],
+    "Philips": ["2200 Series","3200 Series","5000 Series","LatteGo","Saeco Xelsis"],
+    "Quick Mill": ["Alexia","Andreja","Pegaso","Silvano","Vetrano"],
+    "Rancilio": ["Classe 11","Classe 5","Classe 9","Egro One","Silvia"],
+    "Rocket Espresso": ["Appartamento","Cronometro","Giotto","Mozzafiato","R58"],
+    "Saeco": ["Aulika","Incanto","Lirika","PicoBaristo","Royal"],
+    "Schaerer": ["Coffee Art Plus","Coffee Club","Prime","Soul","Touch"],
+    "Siemens": ["EQ.3","EQ.6","EQ.9","Surpresso","TE653"],
+    "Victoria Arduino": ["Adonis","Black Eagle","Eagle One","Mythos One","Venus"],
     "WMF": ["1100 S","1500 S+","5000 S+","9000 S+","Espresso"],
     "Other": ["Other"]
 }
