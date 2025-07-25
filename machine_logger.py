@@ -36,7 +36,7 @@ jobs      = load_df(JOBS_FILE,      JOBS_COLUMNS)
 
 st.title("Coffee Machine Service Logger")
 
-# --- Email helper with attachments ---
+# --- Email helper with attachments and proper multipart/alternative nesting ---
 def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
     sender      = st.secrets["email"]["user"]
     password    = st.secrets["email"]["password"]
@@ -46,17 +46,22 @@ def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
     if cust_email:
         recipients.append(cust_email)
 
-    msg = MIMEMultipart()
+    # Outer mixed container
+    msg = MIMEMultipart("mixed")
     msg["Subject"] = f"Service Job Confirmation – {job_id}"
     msg["From"]    = sender
     msg["To"]      = ", ".join(recipients)
 
-    # plain‐text fallback
+    # Create the alternative part (plain + html)
+    alt = MIMEMultipart("alternative")
+    # Plain‐text fallback
     text = re.sub(r"<br\s*/?>", "\n", re.sub(r"<.*?>", "", html_body))
-    msg.attach(MIMEText(text, "plain"))
-    msg.attach(MIMEText(html_body, "html"))
+    alt.attach(MIMEText(text, "plain"))
+    alt.attach(MIMEText(html_body, "html"))
+    # Attach the alternative part to the main message
+    msg.attach(alt)
 
-    # attach signature
+    # Attach signature image
     if sig_path and os.path.exists(sig_path):
         ctype, _ = mimetypes.guess_type(sig_path)
         maintype, subtype = ctype.split("/",1)
@@ -67,7 +72,7 @@ def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
         part.add_header("Content-Disposition", 'attachment; filename="signature.png"')
         msg.attach(part)
 
-    # attach machine-left multimedia
+    # Attach machine-left multimedia
     if left_path and os.path.exists(left_path):
         ctype, _ = mimetypes.guess_type(left_path)
         maintype, subtype = ctype.split("/",1)
@@ -79,6 +84,7 @@ def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
         part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
         msg.attach(part)
 
+    # Send
     with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
         server.login(sender, password)
         server.sendmail(sender, recipients, msg.as_string())
@@ -111,10 +117,10 @@ coffee_brands = {
     "WMF": ["1100 S","1500 S+","5000 S+","9000 S+","Espresso"],
     "Other": ["Other"]
 }
-brands_no_other = sorted([b for b in coffee_brands if b!="Other"])
+brands_no_other = sorted(b for b in coffee_brands if b!="Other")
 brand_order     = brands_no_other + ["Other"]
 for b in coffee_brands:
-    ms = sorted([m for m in coffee_brands[b] if m!="Other"])
+    ms = sorted(m for m in coffee_brands[b] if m!="Other")
     if "Other" in coffee_brands[b]:
         ms.append("Other")
     coffee_brands[b] = ms
@@ -181,7 +187,7 @@ else:
     sel_machine = st.selectbox("Select machine", ["Add new..."] + labels)
 
     if sel_machine == "Add new...":
-        # Brand & Model selectors outside form
+        # brand/model selectors outside form
         for k in ("brand_sel","prev_brand","model_sel","custom_brand","custom_model"):
             st.session_state.setdefault(k, "")
 
@@ -213,7 +219,9 @@ else:
 
             sub2 = st.form_submit_button("Save Machine")
             if sub2 and not errs:
-                mid = str(uuid.uuid4()); path=f"{mid}_machine.png"; Image.open(photo).save(path)
+                mid = str(uuid.uuid4())
+                path = f"{mid}_machine.png"
+                Image.open(photo).save(path)
                 new = pd.DataFrame([{
                     "ID": mid, "Customer ID": customer_id,
                     "Brand": fb, "Model": fm, "Year": st.session_state.year,
@@ -260,8 +268,8 @@ else:
             )
 
             st.markdown(
-                "**By submitting this form, I acknowledge that I have reviewed and " +
-                "verified the accuracy of all information provided above.**"
+                "**By submitting this form, I acknowledge that I have reviewed and verified "
+                "the accuracy of all information provided above.**"
             )
 
             if st.form_submit_button("Submit Job"):
@@ -301,10 +309,13 @@ else:
                     jobs.to_csv(JOBS_FILE, index=False)
                     st.success("Job logged successfully!")
 
+                    # Build professional HTML email
                     html = f"""
 <p>Dear Customer,</p>
 <p>Thank you for choosing <strong>Machine Hunter</strong> for your service needs. Below are the details of your recent service job:</p>
 <p><strong>Job ID:</strong> {job_id}</p>
+<
+
 <p><strong>Customer:</strong> {sel_cust}</p>
 <p><strong>Machine:</strong> {sel_machine}</p>
 <p><strong>Employee:</strong> {employee}</p>
@@ -320,9 +331,11 @@ else:
 <p>We appreciate your business and look forward to serving you again.</p>
 <p>Sincerely,<br/>Machine Hunter Service Team</p>
 """
+
                     cust_email = cust_row.get("Email","")
                     send_job_email(job_id, cust_email, html, sig_path, lpath)
 
+                    # Preview
                     st.markdown("### Preview")
                     st.write(f"Customer: {sel_cust}")
                     st.write(f"Machine: {sel_machine}")
