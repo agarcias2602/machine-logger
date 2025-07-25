@@ -175,10 +175,13 @@ with tab1:
     # Show images for last job as an example
     if not jobs.empty:
         last = jobs.iloc[-1]
-        if last["Signature Path"] and os.path.exists(last["Signature Path"]):
-            st.image(last["Signature Path"], caption="Last Job Signature", width=200)
-        if last["Machine Photo Path"] and os.path.exists(last["Machine Photo Path"]):
-            st.image(last["Machine Photo Path"], caption="Last Job Machine Photo", width=200)
+        sig_path = last.get("Signature Path", "")
+        if isinstance(sig_path, str) and sig_path and os.path.exists(sig_path):
+            st.image(sig_path, caption="Last Job Signature", width=200)
+        photo_path = last.get("Machine Photo Path", "")
+        if isinstance(photo_path, str) and photo_path and os.path.exists(photo_path):
+            st.image(photo_path, caption="Last Job Machine Photo", width=200)
+
 
 with tab2:
     st.header("All Customers")
