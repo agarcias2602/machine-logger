@@ -36,7 +36,7 @@ customers = load_df(CUSTOMERS_FILE, CUSTOMERS_COLUMNS)
 machines  = load_df(MACHINES_FILE,  MACHINES_COLUMNS)
 jobs      = load_df(JOBS_FILE,      JOBS_COLUMNS)
 
-st.title('☕ Coffee Machine Service Logger')
+st.title('☕ Machine Hunter Service Logger')
 
 # --- Email helper ---
 def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
@@ -279,7 +279,7 @@ else:
                 st.success('Job logged successfully!')
 
                 # --- send email and show preview ---
-                html=f'''<p>Dear Customer,</p><p>Thank you for choosing <strong>Machine Hunter</strong> for your service needs. Below are your job details:</p><p><strong>Job ID:</strong> {jid}</p><p><strong>Customer:</strong> {sel_name}</p><p><strong>Machine:</strong> {sel_m}</p><p><strong>Employee:</strong> {emp}</p><p><strong>Technician:</strong> {tech}</p><p><strong>Date:</strong> {jdate}</p><p><strong>Travel Time:</strong> {travel} minutes</p><p><strong>Time In:</strong> {tin}</p><p><strong>Time Out:</strong> {tout}</p><p><strong>Description:</strong> {desc}</p>{f"<p><strong>Parts Used:</strong> {parts}</p>" if parts else ''}{f"<p><strong>Additional Comments:</strong> {comm}</p>" if comm else ''}<p>Please find attached the technician’s signature and a snapshot of the machine as it was left.</p><p>We appreciate your business and look forward to serving you again.</p><p>Sincerely,<br/>Machine Hunter Service Team</p>'''
+                html=f'''<p>Dear Customer,</p><p>Thank you for choosing <strong>Machine Hunter</strong> for your service needs. Below are your job details:</p><p><strong>Job ID:</strong> {jid}</p><p><strong>Customer:</strong> {sel_name}</p><p><strong>Machine:</strong> {sel_m}</p><p><strong>Employee:</strong> {emp}</p><p><strong>Technician:</strong> {tech}</p><p><strong>Date:</strong> {jdate}</p><p><strong>Travel Time:</strong> {travel} minutes</p><p><strong>Time In:</strong> {tin}</p><p><strong>Time Out:</strong> {tout}</p><p><strong>Description:</strong> {desc}</p>{f"<p><strong>Parts Used:</strong> {parts}</p>" if parts else ''}{f"<p><strong>Additional Comments:</strong> {comm}</p>" if comm else ''}<p>Please find attached your employee's signature and a multimedia file of the machine as it was left by our technician.</p><p>We appreciate your business and look forward to serving you again.</p><p>Sincerely,<br/>Machine Hunter Service Team</p>'''
                 send_job_email(jid,cust['Email'],html,sp,lp)
                 st.markdown('### Preview')
                 st.write(f"**Customer:** {sel_name}")
