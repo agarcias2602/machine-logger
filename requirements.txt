@@ -2,3 +2,6 @@ streamlit
 streamlit-drawable-canvas
 pillow
 pandas
+geopy
+folium
+streamlit-folium
