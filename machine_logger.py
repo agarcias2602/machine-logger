@@ -37,7 +37,7 @@ customers = load_df(CUSTOMERS_FILE, CUSTOMERS_COLUMNS)
 machines  = load_df(MACHINES_FILE,  MACHINES_COLUMNS)
 jobs      = load_df(JOBS_FILE,      JOBS_COLUMNS)
 
-st.title("☕ Coffee Machine Service Logger")
+st.title("☕ Machine Hunter Service Logger")
 
 # —–– Email helper –––—
 def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
