@@ -385,13 +385,11 @@ else:
         comm   = st.text_area("Additional Comments (optional)")
 
         found_files = st.file_uploader(
-            "Machine as Found* (jpg/png/mp4)",
-            type=["jpg","png","mp4"],
+            "Machine as Found* (images & videos)",
             accept_multiple_files=True
         )
         left_files = st.file_uploader(
-            "Machine as Left* (jpg/png/mp4)",
-            type=["jpg","png","mp4"],
+            "Machine as Left* (images & videos)",
             accept_multiple_files=True
         )
 
