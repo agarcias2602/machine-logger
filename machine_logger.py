@@ -256,7 +256,7 @@ if mode == "add":
 
                 st.session_state.mode = "select"
                 st.session_state.selected_customer = None
-                st.experimental_rerun()
+                st.rerun()
         else:
             if (cname and contact and addr and phone and email and
                 re.match(r'.+\d+.+', addr) and
