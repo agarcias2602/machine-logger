@@ -1,10 +1,14 @@
-import re, os, uuid, smtplib, mimetypes
+import re
+import os
+import uuid
+import smtplib
+import mimetypes
+from datetime import datetime
 
 import streamlit as st
 import pandas as pd
 import folium
 from PIL import Image
-from datetime import datetime
 from geopy.geocoders import Nominatim
 from streamlit_folium import st_folium
 from folium.plugins import Search, LocateControl
@@ -13,21 +17,47 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from streamlit_drawable_canvas import st_canvas
+from git import Repo
 
 # --- Files & schemas ---
 CUSTOMERS_FILE = "customers.csv"
 MACHINES_FILE  = "machines.csv"
 JOBS_FILE      = "jobs.csv"
 
-CUSTOMERS_COLUMNS = ["ID","Company Name","Contact Name","Address","Phone","Email"]
-MACHINES_COLUMNS  = ["ID","Customer ID","Brand","Model","Year",
-                     "Serial Number","Photo Path","Observations"]
+CUSTOMERS_COLUMNS = ["ID", "Company Name", "Contact Name", "Address", "Phone", "Email"]
+MACHINES_COLUMNS  = ["ID", "Customer ID", "Brand", "Model", "Year", "Serial Number", "Photo Path", "Observations"]
 JOBS_COLUMNS      = [
-    "Job ID","Customer ID","Machine ID","Employee Name","Technician",
-    "Date","Travel Time (min)","Time In","Time Out","Job Description",
-    "Parts Used","Additional Comments",
-    "Machine as Found Path","Machine as Left Path","Signature Path"
+    "Job ID", "Customer ID", "Machine ID", "Employee Name", "Technician",
+    "Date", "Travel Time (min)", "Time In", "Time Out", "Job Description",
+    "Parts Used", "Additional Comments",
+    "Machine as Found Path", "Machine as Left Path", "Signature Path"
 ]
+
+# --- GitHub push helper ---
+def push_to_github(files, message):
+    """
+    Stage the given files, commit with the provided message, and push to GitHub.
+    Expects GitHub credentials in st.secrets["github"].
+    """
+    token      = st.secrets["github"]["token"]
+    repo_name  = st.secrets["github"]["repo"]
+    branch     = st.secrets["github"]["branch"]
+    user_name  = st.secrets["github"]["user_name"]
+    user_email = st.secrets["github"]["user_email"]
+
+    repo_dir = os.getcwd()
+    repo     = Repo(repo_dir)
+    origin   = repo.remote(name="origin")
+    origin.set_url(f"https://{token}@github.com/{repo_name}.git")
+
+    # Configure committer
+    repo.config_writer().set_value("user", "name",  user_name).release()
+    repo.config_writer().set_value("user", "email", user_email).release()
+
+    # Stage, commit, push
+    repo.index.add(files)
+    repo.index.commit(message)
+    origin.push(refspec=f"{branch}:{branch}")
 
 def load_df(path, cols):
     return pd.read_csv(path) if os.path.exists(path) else pd.DataFrame(columns=cols)
@@ -56,16 +86,16 @@ def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
     msg["To"]      = ", ".join(recipients)
 
     alt = MIMEMultipart("alternative")
-    text = re.sub(r"<.*?>","", html_body).replace("<br>","\n")
+    text = re.sub(r"<.*?>", "", html_body).replace("<br>", "\n")
     alt.attach(MIMEText(text, "plain"))
     alt.attach(MIMEText(html_body, "html"))
     msg.attach(alt)
 
     def _attach(path, fname):
         ctype, _ = mimetypes.guess_type(path)
-        maintype, subtype = ctype.split("/",1)
+        maintype, subtype = ctype.split("/", 1)
         part = MIMEBase(maintype, subtype)
-        with open(path,"rb") as f:
+        with open(path, "rb") as f:
             part.set_payload(f.read())
         encoders.encode_base64(part)
         part.add_header("Content-Disposition", f'attachment; filename="{fname}"')
@@ -82,39 +112,39 @@ def send_job_email(job_id, cust_email, html_body, sig_path, left_path):
 
 # —–– Brands & Models –––—
 coffee_brands = {
-    "Bezzera": ["BZ10","DUO","Magica","Matrix","Mitica"],
-    "Breville": ["Barista Express","Barista Pro","Duo Temp","Infuser","Oracle Touch"],
-    "Carimali": ["Armonia Ultra","BlueDot","CA1000","Optima","SolarTouch"],
-    "Cimbali":  ["M21 Junior","M39","M100","M200","S20"],
-    "DeLonghi": ["Dedica","Dinamica","Eletta","La Specialista","Magnifica","Primadonna"],
-    "ECM":      ["Barista","Classika","Elektronika","Synchronika","Technika"],
-    "Faema":    ["E61","Emblema","E98 UP","Teorema","X30"],
-    "Franke":   ["A300","A600","A800","S200","S700"],
-    "Gaggia":   ["Accademia","Anima","Babila","Cadorna","Classic"],
-    "Jura":     ["ENA 8","Giga X8","Impressa XJ9","WE8","Z10"],
-    "Krups":    ["EA82","EA89","Evidence","Essential","Quattro Force"],
-    "La Marzocco": ["GB5","GS3","Linea Mini","Linea PB","Strada"],
-    "La Spaziale": ["Dream","S1 Mini Vivaldi II","S2","S8","S9"],
-    "Miele":    ["CM5300","CM6150","CM6350","CM6360","CM7750"],
-    "Nuova Simonelli": ["Appia","Aurelia","Musica","Oscar","Talento"],
-    "Philips":  ["2200 Series","3200 Series","5000 Series","LatteGo","Saeco Xelsis"],
-    "Quick Mill": ["Alexia","Andreja","Pegaso","Silvano","Vetrano"],
-    "Rancilio": ["Classe 11","Classe 5","Classe 9","Egro One","Silvia"],
-    "Rocket Espresso": ["Appartamento","Cronometro","Giotto","Mozzafiato","R58"],
-    "Saeco":    ["Aulika","Incanto","Lirika","PicoBaristo","Royal"],
-    "Schaerer": ["Coffee Art Plus","Coffee Club","Prime","Soul","Touch"],
-    "Siemens":  ["EQ.3","EQ.6","EQ.9","Surpresso","TE653"],
-    "Victoria Arduino": ["Adonis","Black Eagle","Eagle One","Mythos One","Venus"],
-    "WMF":      ["1100 S","1500 S+","5000 S+","9000 S+","Espresso"],
+    "Bezzera": ["BZ10", "DUO", "Magica", "Matrix", "Mitica"],
+    "Breville": ["Barista Express", "Barista Pro", "Duo Temp", "Infuser", "Oracle Touch"],
+    "Carimali": ["Armonia Ultra", "BlueDot", "CA1000", "Optima", "SolarTouch"],
+    "Cimbali":  ["M21 Junior", "M39", "M100", "M200", "S20"],
+    "DeLonghi": ["Dedica", "Dinamica", "Eletta", "La Specialista", "Magnifica", "Primadonna"],
+    "ECM":      ["Barista", "Classika", "Elektronika", "Synchronika", "Technika"],
+    "Faema":    ["E61", "Emblema", "E98 UP", "Teorema", "X30"],
+    "Franke":   ["A300", "A600", "A800", "S200", "S700"],
+    "Gaggia":   ["Accademia", "Anima", "Babila", "Cadorna", "Classic"],
+    "Jura":     ["ENA 8", "Giga X8", "Impressa XJ9", "WE8", "Z10"],
+    "Krups":    ["EA82", "EA89", "Evidence", "Essential", "Quattro Force"],
+    "La Marzocco": ["GB5", "GS3", "Linea Mini", "Linea PB", "Strada"],
+    "La Spaziale": ["Dream", "S1 Mini Vivaldi II", "S2", "S8", "S9"],
+    "Miele":    ["CM5300", "CM6150", "CM6350", "CM6360", "CM7750"],
+    "Nuova Simonelli": ["Appia", "Aurelia", "Musica", "Oscar", "Talento"],
+    "Philips":  ["2200 Series", "3200 Series", "5000 Series", "LatteGo", "Saeco Xelsis"],
+    "Quick Mill": ["Alexia", "Andreja", "Pegaso", "Silvano", "Vetrano"],
+    "Rancilio": ["Classe 11", "Classe 5", "Classe 9", "Egro One", "Silvia"],
+    "Rocket Espresso": ["Appartamento", "Cronometro", "Giotto", "Mozzafiato", "R58"],
+    "Saeco":    ["Aulika", "Incanto", "Lirika", "PicoBaristo", "Royal"],
+    "Schaerer": ["Coffee Art Plus", "Coffee Club", "Prime", "Soul", "Touch"],
+    "Siemens":  ["EQ.3", "EQ.6", "EQ.9", "Surpresso", "TE653"],
+    "Victoria Arduino": ["Adonis", "Black Eagle", "Eagle One", "Mythos One", "Venus"],
+    "WMF":      ["1100 S", "1500 S+", "5000 S+", "9000 S+", "Espresso"],
     "Other":    ["Other"]
 }
-brands = sorted([b for b in coffee_brands if b!="Other"]) + ["Other"]
+brands = sorted([b for b in coffee_brands if b != "Other"]) + ["Other"]
 for b in brands:
     opts = coffee_brands[b]
-    coffee_brands[b] = sorted(m for m in opts if m!="Other") + (["Other"] if "Other" in opts else [])
+    coffee_brands[b] = sorted(m for m in opts if m != "Other") + (["Other"] if "Other" in opts else [])
 
 current_year = datetime.now().year
-years = list(range(1970, current_year+1))[::-1]
+years = list(range(1970, current_year + 1))[::-1]
 
 # —–– Geocode once –––—
 if "coords" not in st.session_state:
@@ -138,7 +168,7 @@ mode = st.session_state.mode
 if mode == "select":
     c1, c2 = st.columns([1, 3])
     with c1:
-        if st.button("➕ Add new customer"):
+        if st.button("➕ Add new customer"):
             st.session_state.mode = "add"
     with c2:
         st.markdown("**Or click a red dot to choose a customer**")
@@ -147,10 +177,14 @@ if mode == "select":
     fg = folium.FeatureGroup()
     for cid, (lat, lon) in st.session_state.coords.items():
         if lat and lon:
-            name = customers.loc[customers["ID"]==cid, "Company Name"].iat[0]
+            name = customers.loc[customers["ID"] == cid, "Company Name"].iat[0]
             folium.CircleMarker(
-                [lat, lon], radius=6, color="red",
-                fill=True, fill_color="red", tooltip=name
+                [lat, lon],
+                radius=6,
+                color="red",
+                fill=True,
+                fill_color="red",
+                tooltip=name
             ).add_to(fg)
     fg.add_to(m)
     Search(layer=fg, search_label="tooltip", placeholder="Search…", collapsed=False).add_to(m)
@@ -159,7 +193,7 @@ if mode == "select":
     md = st_folium(m, width=700, height=400)
     click = md.get("last_clicked")
     if click:
-        best, bd = None, float('inf')
+        best, bd = None, float("inf")
         for cid, (clat, clon) in st.session_state.coords.items():
             if clat and clon:
                 d = (clat - click["lat"])**2 + (clon - click["lng"])**2
@@ -167,15 +201,14 @@ if mode == "select":
                     best, bd = cid, d
         if best and bd < 0.0005:
             st.session_state.selected_customer = customers.loc[
-                customers["ID"]==best, "Company Name"
+                customers["ID"] == best, "Company Name"
             ].iat[0]
             st.session_state.mode = "existing"
-            # removed st.experimental_rerun() here
     st.stop()
 
 # —–– 2) ADD CUSTOMER –––—
 if mode == "add":
-    st.header("➕ Add New Customer")
+    st.header("➕ Add New Customer")
     with st.form("add_cust"):
         cname   = st.text_input("Company Name*")
         contact = st.text_input("Contact Name*")
@@ -207,19 +240,17 @@ if mode == "add":
                     "Phone": phone.strip(),
                     "Email": email.strip()
                 }
-                # reload to avoid overwriting
                 customers = load_df(CUSTOMERS_FILE, CUSTOMERS_COLUMNS)
-                customers = pd.concat([customers, pd.DataFrame([new_row])],
-                                      ignore_index=True)
+                customers = pd.concat([customers, pd.DataFrame([new_row])], ignore_index=True)
                 customers.to_csv(CUSTOMERS_FILE, index=False)
+
+                # Push CSV update to GitHub
+                push_to_github([CUSTOMERS_FILE], f"Add customer {cname.strip()}")
 
                 # geocode & store
                 try:
-                    loc = Nominatim(user_agent="machine_logger") \
-                             .geocode(addr, timeout=10)
-                    st.session_state.coords[cid] = (
-                        (loc.latitude, loc.longitude) if loc else (None, None)
-                    )
+                    loc = Nominatim(user_agent="machine_logger").geocode(addr, timeout=10)
+                    st.session_state.coords[cid] = (loc.latitude, loc.longitude) if loc else (None, None)
                 except:
                     st.session_state.coords[cid] = (None, None)
 
@@ -227,13 +258,12 @@ if mode == "add":
                 st.session_state.selected_customer = None
                 st.experimental_rerun()
         else:
-            # preview when valid
             if (cname and contact and addr and phone and email and
                 re.match(r'.+\d+.+', addr) and
                 re.match(r'^\d{3}-\d{3}-\d{4}$', phone) and
                 re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email)):
                 st.markdown(f"[Preview on Google Maps]"
-                            f"(https://www.google.com/maps/search/{addr.replace(' ','+')})")
+                            f"(https://www.google.com/maps/search/{addr.replace(' ', '+')})")
     st.stop()
 
 # —–– 3) EXISTING CUSTOMER –––—
@@ -243,7 +273,7 @@ if not sel_name or sel_name not in customers["Company Name"].tolist():
     st.warning("Customer not found—please select again.")
     st.stop()
 
-cust = customers.loc[customers["Company Name"]==sel_name].iloc[0]
+cust = customers.loc[customers["Company Name"] == sel_name].iloc[0]
 st.subheader("👤 Customer Information")
 st.text_input("Company Name", cust["Company Name"], disabled=True)
 st.text_input("Contact Name", cust["Contact Name"], disabled=True)
@@ -253,32 +283,32 @@ st.text_input("Email",        cust["Email"],        disabled=True)
 
 # —–– Machine flow (add/view) –––—
 customer_id = cust["ID"]
-own = machines[machines["Customer ID"]==customer_id]
-labels = [f"{r.Brand} ({r.Model})" for _,r in own.iterrows()]
+own = machines[machines["Customer ID"] == customer_id]
+labels = [f"{r.Brand} ({r.Model})" for _, r in own.iterrows()]
 mids   = own["ID"].tolist()
 sel_m  = st.selectbox("Select machine", ["Add new..."] + labels, key="machine")
 
 if sel_m == "Add new...":
     st.markdown("### ➕ Add New Machine")
     for k in ("b_sel","prev_b","m_sel","prev_m"):
-        st.session_state.setdefault(k,"")
-    brand = st.selectbox("Brand*", [""]+brands, key="b_sel")
+        st.session_state.setdefault(k, "")
+    brand = st.selectbox("Brand*", [""] + brands, key="b_sel")
     if brand != st.session_state.prev_b:
         st.session_state.prev_b = brand
         st.session_state.m_sel = ""
         st.session_state.prev_m = ""
-    custom_brand = (st.text_input("New brand*", key="prev_b") if brand=="Other" else "")
-    opts = coffee_brands.get(brand, ["Other"] if brand=="Other" else [])
-    model = st.selectbox("Model*", [""]+opts, key="m_sel")
-    custom_model = (st.text_input("New model*", key="prev_m") if model=="Other" else "")
+    custom_brand = (st.text_input("New brand*", key="prev_b") if brand == "Other" else "")
+    opts = coffee_brands.get(brand, ["Other"] if brand == "Other" else [])
+    model = st.selectbox("Model*", [""] + opts, key="m_sel")
+    custom_model = (st.text_input("New model*", key="prev_m") if model == "Other" else "")
     with st.form("add_machine"):
-        year   = st.selectbox("Year*", [""]+[str(y) for y in years], key="yr")
+        year   = st.selectbox("Year*", [""] + [str(y) for y in years], key="yr")
         serial = st.text_input("Serial Number (optional)")
         obs    = st.text_area("Observations (optional)")
         photo  = st.file_uploader("Machine photo*", type=["jpg","png"])
         errs   = []
-        fb = custom_brand.strip() if brand=="Other" else brand
-        fm = custom_model.strip() if model=="Other" else model
+        fb = custom_brand.strip() if brand == "Other" else brand
+        fm = custom_model.strip() if model == "Other" else model
         if not fb:    errs.append("Brand required.")
         if not fm:    errs.append("Model required.")
         if not st.session_state.yr: errs.append("Year required.")
@@ -302,6 +332,10 @@ if sel_m == "Add new...":
                 }])
                 machines = pd.concat([machines, new], ignore_index=True)
                 machines.to_csv(MACHINES_FILE, index=False)
+
+                # Push machine CSV + photo to GitHub
+                push_to_github([MACHINES_FILE, p], f"Add machine {fm} for {sel_name}")
+
                 st.success("Machine added—please reload.")
                 st.stop()
 else:
@@ -343,15 +377,15 @@ else:
             ok = all([tech, desc.strip(), emp.strip(),
                       found, left, sigimg.image_data is not None])
             if not ok:
-                st.error("Complete all required fields & uploads.")
+                st.error("Complete all required fields & uploads.")
             else:
                 jid = str(uuid.uuid4())
                 sp  = f"{jid}_sig.png"
                 Image.fromarray(sigimg.image_data).save(sp)
                 fp  = f"{jid}_found.{found.name.rsplit('.',1)[-1]}"
-                open(fp,"wb").write(found.read())
+                open(fp, "wb").write(found.read())
                 lp  = f"{jid}_left.{left.name.rsplit('.',1)[-1]}"
-                open(lp,"wb").write(left.read())
+                open(lp, "wb").write(left.read())
                 newj = pd.DataFrame([{
                     "Job ID":               jid,
                     "Customer ID":          customer_id,
@@ -365,18 +399,40 @@ else:
                     "Job Description":      desc,
                     "Parts Used":           parts,
                     "Additional Comments":  comm,
-                    "Machine as Found Path":fp,
-                    "Machine as Left Path": lp,
-                    "Signature Path":       sp
+                    "Machine as Found Path": fp,
+                    "Machine as Left Path":  lp,
+                    "Signature Path":        sp
                 }])
                 jobs = pd.concat([jobs, newj], ignore_index=True)
                 jobs.to_csv(JOBS_FILE, index=False)
+
+                # Push job CSV + media + signature to GitHub
+                push_to_github([JOBS_FILE, fp, lp, sp], f"Log job {jid} for {sel_name}")
+
                 st.success("Job logged successfully!")
 
                 # --- send email and show preview ---
-                html=f'''<p>Dear Customer,</p><p>Thank you for choosing <strong>Machine Hunter</strong> for your service needs. Below are your job details:</p><p><strong>Job ID:</strong> {jid}</p><p><strong>Customer:</strong> {sel_name}</p><p><strong>Machine:</strong> {sel_m}</p><p><strong>Employee:</strong> {emp}</p><p><strong>Technician:</strong> {tech}</p><p><strong>Date:</strong> {jdate}</p><p><strong>Travel Time:</strong> {travel} minutes</p><p><strong>Time In:</strong> {tin}</p><p><strong>Time Out:</strong> {tout}</p><p><strong>Description:</strong> {desc}</p>{f"<p><strong>Parts Used:</strong> {parts}</p>" if parts else ''}{f"<p><strong>Additional Comments:</strong> {comm}</p>" if comm else ''}<p>Please find attached your employee's signature and a multimedia file of the machine as it was left by our technician.</p><p>We appreciate your business and look forward to serving you again.</p><p>Sincerely,<br/>Machine Hunter Service Team</p>'''
-                send_job_email(jid,cust['Email'],html,sp,lp)
-                st.markdown('### Preview')
+                html = f'''<p>Dear Customer,</p>
+<p>Thank you for choosing <strong>Machine Hunter</strong> for your service needs. Below are your job details:</p>
+<p><strong>Job ID:</strong> {jid}</p>
+<p><strong>Customer:</strong> {sel_name}</p>
+<p><strong>Machine:</strong> {sel_m}</p>
+<p><strong>Employee:</strong> {emp}</p>
+<p><strong>Technician:</strong> {tech}</p>
+<p><strong>Date:</strong> {jdate}</p>
+<p><strong>Travel Time:</strong> {travel} minutes</p>
+<p><strong>Time In:</strong> {tin}</p>
+<p><strong>Time Out:</strong> {tout}</p>
+<p><strong>Description:</strong> {desc}</p>
+{f"<p><strong>Parts Used:</strong> {parts}</p>" if parts else ''}
+{f"<p><strong>Additional Comments:</strong> {comm}</p>" if comm else ''}
+<p>Please find attached your employee’s signature and a multimedia file of the machine as it was left by our technician.</p>
+<p>We appreciate your business and look forward to serving you again.</p>
+<p>Sincerely,<br/>Machine Hunter Service Team</p>'''
+                send_job_email(jid, cust["Email"], html, sp, lp)
+
+                # Preview in-app
+                st.markdown("### Preview")
                 st.write(f"**Customer:** {sel_name}")
                 st.write(f"**Machine:** {sel_m}")
                 st.write(f"**Employee:** {emp}")
@@ -385,18 +441,30 @@ else:
                 st.write(f"**Travel Time:** {travel} minutes")
                 st.write(f"**Time In:** {tin}   **Time Out:** {tout}")
                 st.write(f"**Description:** {desc}")
-                if parts: st.write(f"**Parts Used:** {parts}")
-                if comm:  st.write(f"**Additional Comments:** {comm}")
-                st.image(sp,caption='Technician’s Signature',width=150)
+                if parts:
+                    st.write(f"**Parts Used:** {parts}")
+                if comm:
+                    st.write(f"**Additional Comments:** {comm}")
+                st.image(sp, caption="Technician’s Signature", width=150)
                 if os.path.exists(fp):
-                    if fp.lower().endswith('.mp4'): st.video(fp)
-                    else:                      st.image(fp,caption='Machine as Found',width=150)
+                    if fp.lower().endswith(".mp4"):
+                        st.video(fp)
+                    else:
+                        st.image(fp, caption="Machine as Found", width=150)
                 if os.path.exists(lp):
-                    if lp.lower().endswith('.mp4'): st.video(lp)
-                    else:                      st.image(lp,caption='Machine as Left',width=150)
+                    if lp.lower().endswith(".mp4"):
+                        st.video(lp)
+                    else:
+                        st.image(lp, caption="Machine as Left", width=150)
 
 # --- Admin tabs ---
-tab1,tab2,tab3=st.tabs(['All Jobs','All Customers','All Machines'])
-with tab1: st.header('All Job Logs');   st.dataframe(jobs)
-with tab2: st.header('All Customers');  st.dataframe(customers)
-with tab3: st.header('All Machines');   st.dataframe(machines)
+tab1, tab2, tab3 = st.tabs(['All Jobs','All Customers','All Machines'])
+with tab1:
+    st.header('All Job Logs')
+    st.dataframe(jobs)
+with tab2:
+    st.header('All Customers')
+    st.dataframe(customers)
+with tab3:
+    st.header('All Machines')
+    st.dataframe(machines)
