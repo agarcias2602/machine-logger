@@ -13,6 +13,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from streamlit_drawable_canvas import st_canvas
+import io, zipfile
 
 # --- Files & schemas ---
 CUSTOMERS_FILE = "customers.csv"
