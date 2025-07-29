@@ -372,8 +372,8 @@ if sel_m=="Add new...":
                 push_to_github([MACHINES_FILE, photo_path],
                                f"Add machine {fm} for {sel_name}")
 
-                st.success("Machine added—reload to see it.")
-                st.stop()
+                st.success("Machine added!")
+                st.rerun()
 
 # --- VIEW & LOG JOB for existing machine ---
 else:
