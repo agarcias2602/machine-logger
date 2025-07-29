@@ -13,7 +13,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from streamlit_drawable_canvas import st_canvas
-import io, zipfile
 
 # --- Files & schemas ---
 CUSTOMERS_FILE = "customers.csv"
@@ -401,45 +400,3 @@ tab1,tab2,tab3=st.tabs(['All Jobs','All Customers','All Machines'])
 with tab1: st.header('All Job Logs');   st.dataframe(jobs)
 with tab2: st.header('All Customers');  st.dataframe(customers)
 with tab3: st.header('All Machines');   st.dataframe(machines)
-
-
-import io, zipfile
-
-# — after you load customers, machines, jobs —
-
-# individual CSV downloads
-st.download_button(
-    label="Download customers.csv",
-    data=customers.to_csv(index=False),
-    file_name="customers.csv",
-    mime="text/csv"
-)
-st.download_button(
-    label="Download machines.csv",
-    data=machines.to_csv(index=False),
-    file_name="machines.csv",
-    mime="text/csv"
-)
-st.download_button(
-    label="Download jobs.csv",
-    data=jobs.to_csv(index=False),
-    file_name="jobs.csv",
-    mime="text/csv"
-)
-
-# or all three in one ZIP
-def make_zip():
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as z:
-        z.writestr("customers.csv", customers.to_csv(index=False))
-        z.writestr("machines.csv",  machines.to_csv(index=False))
-        z.writestr("jobs.csv",      jobs.to_csv(index=False))
-    buf.seek(0)
-    return buf
-
-st.download_button(
-    label="Download ALL data as ZIP",
-    data=make_zip(),
-    file_name="service_data.zip",
-    mime="application/zip"
-)
