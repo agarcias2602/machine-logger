@@ -22,12 +22,10 @@ from git import Repo  # GitPython
 # -----------------------------------------------------------------------------
 # 0) CONFIGURE: where to dump all media
 # -----------------------------------------------------------------------------
-# For a GitHub‑backed repo, keep this folder inside your app directory.
-# If you mount Google Drive (e.g. via rclone) you could point here instead.
 MEDIA_ROOT = "media/customers"
 
 # -----------------------------------------------------------------------------
-# 1) STARTUP: pull the latest CSVs & media from GitHub
+# 1) STARTUP: git pull latest CSVs & media from GitHub
 # -----------------------------------------------------------------------------
 try:
     token     = st.secrets["github"]["token"]
@@ -50,7 +48,6 @@ JOBS_FILE      = "jobs.csv"
 CUSTOMERS_COLUMNS = ["ID","Company Name","Contact Name","Address","Phone","Email"]
 MACHINES_COLUMNS  = ["ID","Customer ID","Brand","Model","Year",
                      "Serial Number","Photo Path","Observations"]
-# store semicolon‑separated lists for multi‑file uploads
 JOBS_COLUMNS      = [
     "Job ID","Customer ID","Machine ID","Employee Name","Technician",
     "Date","Travel Time (min)","Time In","Time Out","Job Description",
@@ -87,47 +84,36 @@ def push_to_github(files, message):
     origin.push(refspec=f"{branch}:{branch}")
 
 # -----------------------------------------------------------------------------
-# 4) EMAIL HELPER
+# 4) EMAIL SENDER (attaches signature only)
 # -----------------------------------------------------------------------------
-def send_job_email(job_id, cust_email, html_body, sig_path, left_paths):
+def send_email(recipients, subject, html_body, sig_path):
     sender      = st.secrets["email"]["user"]
     password    = st.secrets["email"]["password"]
     smtp_server = st.secrets["email"]["smtp_server"]
     smtp_port   = st.secrets["email"]["smtp_port"]
 
-    recipients = ["mhunter4coffee@gmail.com"]
-    if cust_email:
-        recipients.append(cust_email)
-
     msg = MIMEMultipart("mixed")
-    msg["Subject"] = f"Service Job Confirmation – {job_id}"
+    msg["Subject"] = subject
     msg["From"]    = sender
     msg["To"]      = ", ".join(recipients)
 
     alt = MIMEMultipart("alternative")
+    # Plain‑text fallback
     text = re.sub(r"<.*?>","", html_body).replace("<br>","\n")
     alt.attach(MIMEText(text, "plain"))
     alt.attach(MIMEText(html_body, "html"))
     msg.attach(alt)
 
-    def _attach(path):
-        ctype, _ = mimetypes.guess_type(path)
-        maintype, subtype = ctype.split("/",1)
+    # Attach signature image
+    if sig_path and os.path.exists(sig_path):
+        ctype, _ = mimetypes.guess_type(sig_path)
+        maintype, subtype = ctype.split("/", 1)
         part = MIMEBase(maintype, subtype)
-        with open(path,"rb") as f:
+        with open(sig_path, "rb") as f:
             part.set_payload(f.read())
         encoders.encode_base64(part)
-        fname = os.path.basename(path)
-        part.add_header("Content-Disposition", f'attachment; filename="{fname}"')
+        part.add_header("Content-Disposition", f'attachment; filename="{os.path.basename(sig_path)}"')
         msg.attach(part)
-
-    # attach signature
-    if os.path.exists(sig_path):
-        _attach(sig_path)
-    # attach all “left” media
-    for p in left_paths:
-        if os.path.exists(p):
-            _attach(p)
 
     with smtplib.SMTP_SSL(smtp_server, smtp_port) as srv:
         srv.login(sender, password)
@@ -168,7 +154,6 @@ for b, models in base_coffee_brands.items():
     if "Other" not in m:
         m.append("Other")
     coffee_brands[b] = m
-# Allow custom brands too
 coffee_brands["Other"] = ["Other"]
 brands = sorted(list(base_coffee_brands.keys())) + ["Other"]
 
@@ -251,7 +236,7 @@ if mode == "add":
         submit  = st.form_submit_button("Save Customer")
 
         if submit:
-            errs=[]
+            errs = []
             if not cname.strip(): errs.append("Company Name required.")
             if not contact.strip(): errs.append("Contact Name required.")
             if not re.match(r'.+\d+.+',addr) or len(addr.split())<3:
@@ -341,8 +326,8 @@ if sel_m=="Add new...":
         fb = (custom_brand.strip() if brand=="Other" else brand).strip()
         fm = (custom_model.strip() if model=="Other" else model).strip()
 
-        if not fb: errs.append("Brand required.")
-        if not fm: errs.append("Model required.")
+        if not fb:    errs.append("Brand required.")
+        if not fm:    errs.append("Model required.")
         if not st.session_state.yr: errs.append("Year required.")
         if not photo: errs.append("Photo required.")
 
@@ -350,7 +335,7 @@ if sel_m=="Add new...":
             if errs:
                 st.error("\n".join(errs))
             else:
-                mid = str(uuid.uuid4())
+                mid    = str(uuid.uuid4())
                 folder = os.path.join(MEDIA_ROOT, customer_id, "machines", mid)
                 os.makedirs(folder, exist_ok=True)
                 photo_path = os.path.join(folder, photo.name)
@@ -417,7 +402,6 @@ else:
             background_color="#fff", height=100, width=300,
             drawing_mode="freedraw", key="sig"
         )
-
         st.markdown(
             "**By submitting this form, I acknowledge that I have reviewed and verified the accuracy of all information provided above.**"
         )
@@ -429,28 +413,33 @@ else:
                 st.error("Complete all required fields & uploads.")
             else:
                 jid = str(uuid.uuid4())
-                job_folder        = os.path.join(MEDIA_ROOT, customer_id, "jobs", jid)
-                found_folder      = os.path.join(job_folder, "found")
-                left_folder       = os.path.join(job_folder, "left")
-                signature_folder  = os.path.join(job_folder, "signature")
-                for d in (found_folder,left_folder,signature_folder):
+                # prepare folders
+                job_folder       = os.path.join(MEDIA_ROOT, customer_id, "jobs", jid)
+                found_folder     = os.path.join(job_folder, "found")
+                left_folder      = os.path.join(job_folder, "left")
+                signature_folder = os.path.join(job_folder, "signature")
+                for d in (found_folder, left_folder, signature_folder):
                     os.makedirs(d, exist_ok=True)
 
+                # save found media
                 found_paths = []
                 for f in found_files:
                     p = os.path.join(found_folder, f.name)
-                    with open(p,"wb") as out: out.write(f.read())
+                    with open(p, "wb") as out: out.write(f.read())
                     found_paths.append(p)
 
+                # save left media
                 left_paths = []
                 for f in left_files:
                     p = os.path.join(left_folder, f.name)
-                    with open(p,"wb") as out: out.write(f.read())
+                    with open(p, "wb") as out: out.write(f.read())
                     left_paths.append(p)
 
+                # save signature
                 sig_path = os.path.join(signature_folder, f"{jid}_sig.png")
                 Image.fromarray(sigimg.image_data).save(sig_path)
 
+                # update jobs.csv
                 newj = pd.DataFrame([{
                     "Job ID":               jid,
                     "Customer ID":          customer_id,
@@ -471,30 +460,98 @@ else:
                 jobs = pd.concat([jobs, newj], ignore_index=True)
                 jobs.to_csv(JOBS_FILE, index=False)
 
+                # commit CSV + all media
                 all_files = [JOBS_FILE] + found_paths + left_paths + [sig_path]
                 push_to_github(all_files, f"Log job {jid} for {sel_name}")
 
                 st.success("Job logged successfully!")
 
-                html = f"<p>Dear Customer,</p>…"  # your existing template
-                send_job_email(jid, cust["Email"], html, sig_path, left_paths)
+                # prepare raw link base for GitHub
+                raw_base = f"https://raw.githubusercontent.com/{st.secrets['github']['repo']}/{st.secrets['github']['branch']}"
 
+                # build HTML for customer email
+                customer_links_html = "".join(
+                    f'<li><a href="{raw_base}/{p.replace(os.sep,"/")}">{os.path.basename(p)}</a></li>'
+                    for p in left_paths
+                )
+                html_customer = f"""
+<p>Dear {cust['Contact Name']},</p>
+<p>Thank you for choosing Machine Hunter for your service needs. Below are your job details:</p>
+<ul>
+  <li><strong>Job ID:</strong> {jid}</li>
+  <li><strong>Customer:</strong> {sel_name}</li>
+  <li><strong>Machine:</strong> {sel_m}</li>
+  <li><strong>Employee:</strong> {emp}</li>
+  <li><strong>Technician:</strong> {tech}</li>
+  <li><strong>Date:</strong> {jdate}</li>
+  <li><strong>Description:</strong> {desc}</li>
+  {f"<li><strong>Additional Comments:</strong> {comm}</li>" if comm else ""}
+</ul>
+<p><strong>Signature:</strong> attached.</p>
+<p><strong>Machine as it was left:</strong></p>
+<ul>
+  {customer_links_html}
+</ul>
+<p>Please find attached your employee's signature and the multimedia of the machine as it was left by our technician.</p>
+<p>We appreciate your business and look forward to serving you again.<p>
+<p>Sincerely,<br/>Machine Hunter Service Team</p>
+"""
+
+                # send customer email
+                send_email(
+                    recipients=[cust["Email"]],
+                    subject=f"Service Job Confirmation – {jid}",
+                    html_body=html_customer,
+                    sig_path=sig_path
+                )
+
+                # build HTML for internal email
+                internal_links_html = customer_links_html
+                html_internal = f"""
+<p>New service job logged:</p>
+<ul>
+  <li><strong>Job ID:</strong> {jid}</li>
+  <li><strong>Customer:</strong> {sel_name}</li>
+  <li><strong>Machine:</strong> {sel_m}</li>
+  <li><strong>Employee:</strong> {emp}</li>
+  <li><strong>Technician:</strong> {tech}</li>
+  <li><strong>Date:</strong> {jdate}</li>
+  <li><strong>Travel Time:</strong> {travel} minutes</li>
+  <li><strong>Time In:</strong> {tin}</li>
+  <li><strong>Time Out:</strong> {tout}</li>
+  <li><strong>Description:</strong> {desc}</li>
+  {f"<li><strong>Additional Comments:</strong> {comm}</li>" if comm else ""}
+</ul>
+<p><strong>Signature:</strong> attached.</p>
+<p><strong>Machine as it was left:</strong></p>
+<ul>
+  {internal_links_html}
+</ul>
+"""
+
+                # send internal email to the address in secrets
+                send_email(
+                    recipients=[st.secrets["email"]["user"]],
+                    subject=f"Service Job Logged – {jid}",
+                    html_body=html_internal,
+                    sig_path=sig_path
+                )
+
+                # In‑app preview
                 st.markdown("### Preview")
-                # Preview signature
-                if os.path.exists(sig_path):
-                    st.image(sig_path, caption="Signature", width=150)
-                # Preview found media
+                st.image(sig_path, caption="Technician’s Signature", width=150)
+                st.markdown("**Machine as Found:**")
                 for p in found_paths:
                     if p.lower().endswith(".mp4"):
                         st.video(p)
                     else:
-                        st.image(p, caption="Machine as Found", width=150)
-                # Preview left media
+                        st.image(p, caption=os.path.basename(p), width=150)
+                st.markdown("**Machine as Left:**")
                 for p in left_paths:
                     if p.lower().endswith(".mp4"):
                         st.video(p)
                     else:
-                        st.image(p, caption="Machine as Left", width=150)
+                        st.image(p, caption=os.path.basename(p), width=150)
 
 # -----------------------------------------------------------------------------
 # 11) ADMIN TABS: show full tables
