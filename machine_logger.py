@@ -520,6 +520,7 @@ else:
   <li><strong>Time In:</strong> {tin}</li>
   <li><strong>Time Out:</strong> {tout}</li>
   <li><strong>Description:</strong> {desc}</li>
+  {f"<li><strong>Parts Used:</strong> {parts}</li>" if parts else ""}
   {f"<li><strong>Additional Comments:</strong> {comm}</li>" if comm else ""}
 </ul>
 <p><strong>Signature:</strong> attached.</p>
