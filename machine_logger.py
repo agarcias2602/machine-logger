@@ -443,5 +443,3 @@ st.download_button(
     file_name="service_data.zip",
     mime="application/zip"
 )
-
-)
